@@ -7,5 +7,6 @@ target(
     'pants-plugins/src/python/internal_backend/repositories:plugin',
     'pants-plugins/src/python/internal_backend/sitegen:plugin',
     'pants-plugins/src/python/internal_backend/utilities:plugin',
+    'pants-plugins/src/python/internal_backend/my_plugin:plugin',
   ]
 )
