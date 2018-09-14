@@ -21,6 +21,7 @@ from pants.backend.jvm.subsystems.junit import JUnit
 from pants.backend.jvm.subsystems.jvm_platform import JvmPlatform
 from pants.backend.jvm.targets.junit_tests import JUnitTests
 from pants.backend.jvm.targets.jvm_target import JvmTarget
+from pants.backend.jvm.targets.scala_library import ScalaLibrary
 from pants.backend.jvm.tasks.classpath_util import ClasspathUtil
 from pants.backend.jvm.tasks.coverage.manager import CodeCoverage
 from pants.backend.jvm.tasks.jvm_task import JvmTask
@@ -543,7 +544,10 @@ class JUnitRun(PartitionedTestRunnerTaskMixin, JvmToolTaskMixin, JvmTask):
 
   def _test_target_filter(self):
     def target_filter(target):
-      return isinstance(target, JUnitTests)
+      # Solution 1: We mark ScalaLibraries as tests too
+      # return isinstance(target, JUnitTests) or isinstance(target, ScalaLibrary)
+      # Solution 2: If a test target depends on you, you are a test target
+      return isinstance(target, JUnitTests) or (isinstance(target, ScalaLibrary) and len(filter(target_filter, target.dependents)) > 0)
     return target_filter
 
   def _validate_target(self, target):
