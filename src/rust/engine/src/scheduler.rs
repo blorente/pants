@@ -18,7 +18,7 @@ use nodes::{NodeKey, Select, Tracer, TryInto, Visualizer};
 use parking_lot::Mutex;
 use rule_graph;
 use selectors;
-use ui::EngineDisplay;
+use ui::display::EngineDisplay;
 
 ///
 /// A Session represents a related series of requests (generally: one run of the pants CLI) on an

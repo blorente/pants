@@ -35,7 +35,7 @@ use std::time::Duration;
 
 use rand::Rng;
 
-use ui::EngineDisplay;
+use ui::display::EngineDisplay;
 
 // N.B. This is purely a demo/testing bin target for exercising the library.
 
