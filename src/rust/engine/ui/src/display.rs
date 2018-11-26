@@ -4,6 +4,8 @@ use std::io::{stdout, Result, Stdout};
 use std::thread;
 use std::time::Duration;
 
+use log;
+use parking_lot::Mutex;
 use termion::cursor::DetectCursorPos;
 use termion::raw::IntoRawMode;
 use termion::raw::RawTerminal;
@@ -22,7 +24,7 @@ pub struct EngineDisplay {
   padding: String,
   terminal: Console,
   action_map: BTreeMap<String, String>,
-  logs: VecDeque<String>,
+  logs: Mutex<VecDeque<String>>,
   running: bool,
   cursor_start: (u16, u16),
   terminal_size: (u16, u16),
@@ -44,7 +46,6 @@ impl EngineDisplay {
   }
 
   fn initialize(&mut self, display_worker_count: usize) {
-    self.start();
     let worker_ids: Vec<String> = (0..display_worker_count)
       .map(|s| format!("{}", s))
       .collect();
@@ -70,7 +71,7 @@ impl EngineDisplay {
       // This is arbitrary based on a guesstimated peak terminal row size for modern displays.
       // The reason this can't be capped to e.g. the starting size is because of resizing - we
       // want to be able to fill the entire screen if resized much larger than when we started.
-      logs: VecDeque::with_capacity(500),
+      logs: Mutex::new(VecDeque::with_capacity(500)),
       running: false,
       // N.B. This will cause the screen to clear - but with some improved position
       // tracking logic we could avoid screen clearing in favor of using the value
@@ -167,7 +168,7 @@ impl EngineDisplay {
   // Renders one frame of the log portion of the screen.
   fn render_logs(&mut self, max_entries: usize) -> usize {
     let cursor_start = self.cursor_start;
-    let printable_logs: Vec<String> = self.logs.iter().take(max_entries).cloned().collect();
+    let printable_logs: Vec<String> = self.logs.lock().iter().take(max_entries).cloned().collect();
 
     let mut counter: usize = 0;
     for (n, log_entry) in printable_logs.iter().rev().enumerate() {
@@ -276,8 +277,8 @@ impl EngineDisplay {
   }
 
   // Adds a log entry for display.
-  pub fn log(&mut self, log_entry: String) {
-    self.logs.push_front(log_entry)
+  pub fn log(&self, log_entry: String) {
+    self.logs.lock().push_front(log_entry)
   }
 
   pub fn worker_count(&self) -> usize {

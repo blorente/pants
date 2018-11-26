@@ -1946,6 +1946,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "ui"
 version = "0.0.1"
 dependencies = [
+ "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parking_lot 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-segmentation 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
