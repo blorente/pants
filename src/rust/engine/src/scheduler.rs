@@ -18,7 +18,7 @@ use nodes::{NodeKey, Select, Tracer, TryInto, Visualizer};
 use parking_lot::Mutex;
 use rule_graph;
 use selectors;
-use ui::display::EngineDisplay;
+use ui::display::LOG;
 
 ///
 /// A Session represents a related series of requests (generally: one run of the pants CLI) on an
@@ -279,8 +279,8 @@ impl Scheduler {
     let (sender, receiver) = mpsc::channel();
 
     // Setting up display
-    let mut optional_display: Option<EngineDisplay> =
-      EngineDisplay::create(request.ui_worker_count as usize, request.should_render_ui);
+    //    let mut optional_display: Option<EngineDisplay> = (*LOG).create_display(4, true);
+    (*LOG).start_rendering((*LOG).worker_count());
 
     Scheduler::execute_helper(context, sender, request.roots.clone(), 8);
     let roots: Vec<NodeKey> = request
@@ -297,14 +297,13 @@ impl Scheduler {
     let results = loop {
       if let Ok(res) = receiver.recv_timeout(Duration::from_millis(100)) {
         break res;
-      } else if let Some(display) = optional_display.as_mut() {
-        Scheduler::display_ongoing_tasks(&self.core.graph, &roots, display, &mut tasks_to_display);
+      } else if true {
+        Scheduler::display_ongoing_tasks(&self.core.graph, &roots, &mut tasks_to_display);
       }
     };
-    if let Some(display) = optional_display.as_mut() {
-      // Ran after printing the result of a console_rule.
-      display.finish();
-    };
+
+    // Ran after printing the result of a console_rule.
+    (*LOG).stop_rendering();
 
     results
   }
@@ -312,11 +311,10 @@ impl Scheduler {
   fn display_ongoing_tasks(
     graph: &Graph<NodeKey>,
     roots: &[NodeKey],
-    display: &mut EngineDisplay,
     tasks_to_display: &mut IndexMap<String, Duration>,
   ) {
     // Update the graph. To do that, we iterate over heavy hitters.
-    let heavy_hitters = graph.heavy_hitters(&roots, display.worker_count());
+    let heavy_hitters = graph.heavy_hitters(&roots, (*LOG).worker_count());
     // Insert every one in the set of tasks to display.
     // For tasks already here, the durations are overwritten.
     tasks_to_display.extend(heavy_hitters.clone().into_iter());
@@ -326,19 +324,19 @@ impl Scheduler {
         tasks_to_display.swap_remove(&task);
       }
     }
-    let display_worker_count = display.worker_count();
+    let display_worker_count = (*LOG).worker_count();
     let ongoing_tasks = tasks_to_display;
     for (i, id) in ongoing_tasks.iter().enumerate() {
       // TODO Maybe we want to print something else besides the ID here.
-      display.update(i.to_string(), format!("{:?}", id));
+      (*LOG).update(i.to_string(), format!("{:?}", id));
     }
     // If the number of ongoing tasks is less than the number of workers,
     // fill the rest of the workers with empty string.
     // TODO(yic): further improve the UI. https://github.com/pantsbuild/pants/issues/6666
     for i in ongoing_tasks.len()..display_worker_count {
-      display.update(i.to_string(), "".to_string());
+      (*LOG).update(i.to_string(), "".to_string());
     }
-    display.render();
+    (*LOG).render();
   }
 }
 

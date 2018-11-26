@@ -40,7 +40,6 @@ mod core;
 mod externs;
 mod handles;
 mod interning;
-mod logger;
 mod nodes;
 mod rule_graph;
 mod scheduler;

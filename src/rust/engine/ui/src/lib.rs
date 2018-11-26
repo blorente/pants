@@ -27,6 +27,7 @@
 // Arc<Mutex> can be more clear than needing to grok Orderings:
 #![cfg_attr(feature = "cargo-clippy", allow(mutex_atomic))]
 
+extern crate lazy_static;
 extern crate log;
 extern crate parking_lot;
 extern crate rand;

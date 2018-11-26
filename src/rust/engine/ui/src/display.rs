@@ -4,6 +4,7 @@ use std::io::{stdout, Result, Stdout};
 use std::thread;
 use std::time::Duration;
 
+use lazy_static::lazy_static;
 use log;
 use parking_lot::Mutex;
 use termion::cursor::DetectCursorPos;
@@ -15,6 +16,71 @@ use unicode_segmentation::UnicodeSegmentation;
 enum Console {
   Terminal(RawTerminal<Stdout>),
   Pipe(Stdout),
+}
+
+lazy_static! {
+  pub static ref LOG: MasterDisplay = MasterDisplay::new();
+}
+
+pub struct MasterDisplay {
+  inner: Mutex<EngineDisplay>,
+}
+
+impl MasterDisplay {
+  pub fn new() -> MasterDisplay {
+    MasterDisplay {
+      inner: Mutex::new(EngineDisplay::empty()),
+    }
+  }
+
+  pub fn worker_count(&self) -> usize {
+    5
+  }
+
+  pub fn init() {
+    log::set_max_level(log::LevelFilter::Debug);
+    log::set_logger(&*LOG)
+      .expect("Failed to set logger (maybe you tried to call init multiple times?)");
+  }
+
+  pub fn start_rendering(&self, worker_count: usize) {
+    let mut display = self.inner.lock();
+    display.initialize(worker_count);
+    display.start();
+  }
+
+  pub fn stop_rendering(&self) {
+    self.inner.lock().finish();
+  }
+
+  pub fn update(&self, worker_name: String, action: String) {
+    self.inner.lock().update(worker_name, action);
+  }
+
+  pub fn render(&self) {
+    self.inner.lock().render();
+  }
+
+  // TODO It would be nice to have a function get_display() -> &EngineDisplay, that returned some kind of reference, to avoid doing (*LOG).fun all the time.
+}
+
+impl log::Log for MasterDisplay {
+  fn enabled(&self, metadata: &log::Metadata) -> bool {
+    true
+  }
+
+  fn log(&self, record: &log::Record) {
+    if !self.enabled(record.metadata()) {
+      return;
+    }
+    let message = format!("{}", record.args());
+    let inner_ref = &self.inner.lock();
+    inner_ref.log(message);
+  }
+
+  fn flush(&self) {
+    unimplemented!()
+  }
 }
 
 pub struct EngineDisplay {
@@ -34,6 +100,10 @@ pub struct EngineDisplay {
 // TODO: Better error handling for .flush() and .write() failure modes.
 // TODO: Permit scrollback in the terminal - both at exit and during the live run.
 impl EngineDisplay {
+  pub fn empty() -> EngineDisplay {
+    EngineDisplay::for_stdout(0)
+  }
+
   /// Create a EngineDisplay only if stdout is tty and v2 ui is enabled.
   pub fn create(display_worker_count: usize, should_render_ui: bool) -> Option<EngineDisplay> {
     if should_render_ui && termion::is_tty(&stdout()) {
@@ -52,7 +122,7 @@ impl EngineDisplay {
     for worker_id in worker_ids {
       self.add_worker(worker_id);
     }
-    self.render();
+    //    self.render();
   }
 
   pub fn for_stdout(indent_level: u16) -> EngineDisplay {

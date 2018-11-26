@@ -12,8 +12,8 @@ use core::{Failure, Function, Key, TypeConstraint, TypeId, Value};
 use handles::{DroppingHandle, Handle};
 use interning::Interns;
 use lazy_static::lazy_static;
-use logger::UILogger;
 use parking_lot::RwLock;
+use ui::display;
 
 pub fn eval(python: &str) -> Result<Value, Failure> {
   with_externs(|e| (e.eval)(e.context, python.as_ptr(), python.len() as u64)).into()
@@ -242,18 +242,6 @@ lazy_static! {
   static ref INTERNS: RwLock<Interns> = RwLock::new(Interns::new());
 }
 
-// This is mut so that the max level can be set via set_externs.
-// It should only be set exactly once, and nothing should ever read it (it is only defined to
-// prevent the FfiLogger from being dropped).
-// In order to avoid a performance hit, there is no lock guarding it (because if it had a lock, it
-// would need to be acquired for every single logging statement).
-// Please don't mutate it.
-// Please.
-//static mut LOGGER: UILogger = UILogger {
-//  level_filter: log::LevelFilter::Off,
-//  display: EngineDisplay::create(4, true).unwrap()
-//};
-
 ///
 /// Set the static Externs for this process. All other methods of this module will fail
 /// until this has been called.
@@ -261,7 +249,10 @@ lazy_static! {
 pub fn set_externs(externs: Externs) {
   let mut externs_ref = EXTERNS.write();
   *externs_ref = Some(externs);
-  UILogger::init();
+
+  // TODO This probably shouldn't be called here, since it no longer has anything to do with externs
+  // However, this is an easy place to ensure that it gets called only once.
+  display::MasterDisplay::init();
 }
 
 fn with_externs<F, T>(f: F) -> T
