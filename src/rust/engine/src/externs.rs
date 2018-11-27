@@ -247,12 +247,14 @@ lazy_static! {
 /// until this has been called.
 ///
 pub fn set_externs(externs: Externs) {
+  let log_level = externs.log_level;
+
   let mut externs_ref = EXTERNS.write();
   *externs_ref = Some(externs);
 
   // TODO This probably shouldn't be called here, since it no longer has anything to do with externs
   // However, this is an easy place to ensure that it gets called only once.
-  display::MasterDisplay::init();
+  display::MasterDisplay::init(log_level);
 }
 
 fn with_externs<F, T>(f: F) -> T
@@ -592,49 +594,7 @@ where
   mem::forget(cs);
   output
 }
-//
-//// This is a hard-coding of constants in the standard logging python package.
-//// TODO: Switch from CustomTryInto to TryFromPrimitive when try_from is stable.
-//#[derive(Debug, Eq, PartialEq, CustomTryInto)]
-//#[repr(u8)]
-//enum PythonLogLevel {
-//  NotSet = 0,
-//  // Trace doesn't exist in a Python world, so set it to "a bit lower than Debug".
-//  Trace = 5,
-//  Debug = 10,
-//  Info = 20,
-//  Warn = 30,
-//  Error = 40,
-//  Critical = 50,
-//}
-//
-//impl From<log::Level> for PythonLogLevel {
-//  fn from(level: log::Level) -> Self {
-//    match level {
-//      log::Level::Error => PythonLogLevel::Error,
-//      log::Level::Warn => PythonLogLevel::Warn,
-//      log::Level::Info => PythonLogLevel::Info,
-//      log::Level::Debug => PythonLogLevel::Debug,
-//      log::Level::Trace => PythonLogLevel::Trace,
-//    }
-//  }
-//}
-//
-//impl From<PythonLogLevel> for log::LevelFilter {
-//  fn from(level: PythonLogLevel) -> Self {
-//    match level {
-//      PythonLogLevel::NotSet => log::LevelFilter::Off,
-//      PythonLogLevel::Trace => log::LevelFilter::Trace,
-//      PythonLogLevel::Debug => log::LevelFilter::Debug,
-//      PythonLogLevel::Info => log::LevelFilter::Info,
-//      PythonLogLevel::Warn => log::LevelFilter::Warn,
-//      PythonLogLevel::Error => log::LevelFilter::Error,
-//      // Rust doesn't have a Critical, so treat them like Errors.
-//      PythonLogLevel::Critical => log::LevelFilter::Error,
-//    }
-//  }
-//}
-//
+
 /////
 ///// FfiLogger is an implementation of log::Log which asks the Python logging system to log via cffi.
 /////

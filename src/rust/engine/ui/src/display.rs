@@ -6,17 +6,13 @@ use std::time::Duration;
 
 use lazy_static::lazy_static;
 use log;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use termion::cursor::DetectCursorPos;
 use termion::raw::IntoRawMode;
 use termion::raw::RawTerminal;
 use termion::{clear, color, cursor};
 use unicode_segmentation::UnicodeSegmentation;
-
-enum Console {
-  Terminal(RawTerminal<Stdout>),
-  Pipe(Stdout),
-}
+use TryIntoPythonLogLevel;
 
 lazy_static! {
   pub static ref LOG: MasterDisplay = MasterDisplay::new();
@@ -24,49 +20,82 @@ lazy_static! {
 
 pub struct MasterDisplay {
   inner: Mutex<EngineDisplay>,
+  level: RwLock<log::LevelFilter>,
 }
 
 impl MasterDisplay {
   pub fn new() -> MasterDisplay {
     MasterDisplay {
       inner: Mutex::new(EngineDisplay::empty()),
+      level: RwLock::new(log::LevelFilter::Info),
     }
   }
 
   pub fn worker_count(&self) -> usize {
-    5
+    self.inner.lock().worker_count()
   }
 
-  pub fn init() {
-    log::set_max_level(log::LevelFilter::Debug);
-    log::set_logger(&*LOG)
-      .expect("Failed to set logger (maybe you tried to call init multiple times?)");
+  pub fn init(max_level: u8) {
+    let max_python_level = max_level.try_into_PythonLogLevel();
+    match max_python_level {
+      Ok(python_level) => {
+        let level: log::LevelFilter = python_level.into();
+        LOG.set_level(level);
+        log::set_max_level(level);
+        log::set_logger(&*LOG)
+          .expect("Failed to set logger (maybe you tried to call init multiple times?)");
+      }
+      Err(err) => panic!("Unrecognised log level from python: {}: {}", max_level, err),
+    };
   }
 
-  pub fn start_rendering(&self, worker_count: usize) {
-    let mut display = self.inner.lock();
-    display.initialize(worker_count);
-    display.start();
+  fn set_level(&self, new_level: log::LevelFilter) {
+    let mut level = self.level.write();
+    *level = new_level;
+  }
+
+  pub fn level(&self) -> log::LevelFilter {
+    *self.level.read()
+  }
+
+  pub fn start_rendering(&self, worker_count: usize, should_render: bool) {
+    if should_render && termion::is_tty(&stdout()) {
+      let mut display = self.inner.lock();
+      display.initialize(worker_count);
+      display.start();
+    }
   }
 
   pub fn stop_rendering(&self) {
-    self.inner.lock().finish();
+    let mut display = self.inner.lock();
+    if display.is_running() {
+      println!("BL: Stopping display");
+      display.finish();
+    }
   }
 
   pub fn update(&self, worker_name: String, action: String) {
-    self.inner.lock().update(worker_name, action);
+    let mut display = self.inner.lock();
+    if display.is_running() {
+      println!("BL: Updating display");
+      display.update(worker_name, action);
+    }
   }
 
   pub fn render(&self) {
-    self.inner.lock().render();
+    let mut display = self.inner.lock();
+    if display.is_running() {
+      println!("BL: Rendering display");
+      display.render();
+    }
   }
 
-  // TODO It would be nice to have a function get_display() -> &EngineDisplay, that returned some kind of reference, to avoid doing (*LOG).fun all the time.
+  // TODO It would be nice to have a function get_display() -> &EngineDisplay, that returned some kind of reference, to avoid doing LOG.fun all the time.
 }
 
 impl log::Log for MasterDisplay {
   fn enabled(&self, metadata: &log::Metadata) -> bool {
-    true
+    metadata.level() <= *self.level.read()
   }
 
   fn log(&self, record: &log::Record) {
@@ -79,8 +108,13 @@ impl log::Log for MasterDisplay {
   }
 
   fn flush(&self) {
-    unimplemented!()
+    unimplemented!();
   }
+}
+
+enum Console {
+  Terminal(RawTerminal<Stdout>),
+  Pipe(Stdout),
 }
 
 pub struct EngineDisplay {
@@ -104,17 +138,6 @@ impl EngineDisplay {
     EngineDisplay::for_stdout(0)
   }
 
-  /// Create a EngineDisplay only if stdout is tty and v2 ui is enabled.
-  pub fn create(display_worker_count: usize, should_render_ui: bool) -> Option<EngineDisplay> {
-    if should_render_ui && termion::is_tty(&stdout()) {
-      let mut display = EngineDisplay::for_stdout(0);
-      display.initialize(display_worker_count);
-      Some(display)
-    } else {
-      None
-    }
-  }
-
   fn initialize(&mut self, display_worker_count: usize) {
     let worker_ids: Vec<String> = (0..display_worker_count)
       .map(|s| format!("{}", s))
@@ -122,13 +145,12 @@ impl EngineDisplay {
     for worker_id in worker_ids {
       self.add_worker(worker_id);
     }
-    //    self.render();
   }
 
   pub fn for_stdout(indent_level: u16) -> EngineDisplay {
     let write_handle = stdout();
 
-    EngineDisplay {
+    let mut display = EngineDisplay {
       sigil: '⚡',
       divider: "▵".to_string(),
       poll_interval_ms: Duration::from_millis(55),
@@ -154,6 +176,23 @@ impl EngineDisplay {
       // as we've done here is the safest way to avoid terminal oddness.
       cursor_start: (1, 1),
       terminal_size: EngineDisplay::get_size(),
+    };
+
+    display.stop_raw_mode().unwrap();
+    display
+  }
+
+  fn stop_raw_mode(&mut self) -> Result<()> {
+    match self.terminal {
+      Console::Terminal(ref mut t) => t.suspend_raw_mode(),
+      _ => Ok(()),
+    }
+  }
+
+  fn start_raw_mode(&mut self) -> Result<()> {
+    match self.terminal {
+      Console::Terminal(ref mut t) => t.activate_raw_mode(),
+      _ => Ok(()),
     }
   }
 
@@ -213,7 +252,7 @@ impl EngineDisplay {
       Console::Terminal(ref mut t) => t.write(msg.as_bytes()),
       Console::Pipe(ref mut p) => p.write(msg.as_bytes()),
     };
-    self.flush();
+    self.flush().unwrap();
     res
   }
 
@@ -320,6 +359,7 @@ impl EngineDisplay {
   // Starts the EngineDisplay at the current cursor position.
   pub fn start(&mut self) {
     self.running = true;
+    self.start_raw_mode().unwrap();
     let cursor_start = self.cursor_start;
     self
       .write(&format!(
@@ -330,29 +370,9 @@ impl EngineDisplay {
       )).expect("could not write to terminal");
   }
 
-  // Adds a worker/thread to the visual representation.
-  pub fn add_worker(&mut self, worker_name: String) {
-    let action_msg = format!("booting {}", worker_name);
-    self.update(worker_name, action_msg);
-  }
-
   // Updates the status of a worker/thread.
   pub fn update(&mut self, worker_name: String, action: String) {
     self.action_map.insert(worker_name, action);
-  }
-
-  // Removes a worker/thread from the visual representation.
-  pub fn remove_worker(&mut self, worker_id: &str) {
-    self.action_map.remove(worker_id);
-  }
-
-  // Adds a log entry for display.
-  pub fn log(&self, log_entry: String) {
-    self.logs.lock().push_front(log_entry)
-  }
-
-  pub fn worker_count(&self) -> usize {
-    self.action_map.len()
   }
 
   // Terminates the EngineDisplay and returns the cursor to a static position.
@@ -367,5 +387,31 @@ impl EngineDisplay {
         clear_after_cursor = clear::AfterCursor,
         reveal_cursor = termion::cursor::Show
       )).expect("could not write to terminal");
+    self.stop_raw_mode().unwrap();
+  }
+
+  // Removes a worker/thread from the visual representation.
+  pub fn remove_worker(&mut self, worker_id: &str) {
+    self.action_map.remove(worker_id);
+  }
+
+  // Adds a worker/thread to the visual representation.
+  pub fn add_worker(&mut self, worker_name: String) {
+    let action_msg = format!("booting {}", worker_name);
+    self.update(worker_name, action_msg);
+  }
+
+  // Adds a log entry for display.
+  pub fn log(&self, log_entry: String) {
+    self.logs.lock().push_front(log_entry)
+  }
+
+  // Removes all logs.
+  pub fn flush_logs(&self) {
+    self.logs.lock().clear()
+  }
+
+  pub fn worker_count(&self) -> usize {
+    self.action_map.len()
   }
 }

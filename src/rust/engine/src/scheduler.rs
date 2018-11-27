@@ -279,8 +279,7 @@ impl Scheduler {
     let (sender, receiver) = mpsc::channel();
 
     // Setting up display
-    //    let mut optional_display: Option<EngineDisplay> = (*LOG).create_display(4, true);
-    (*LOG).start_rendering((*LOG).worker_count());
+    LOG.start_rendering(request.ui_worker_count as usize, request.should_render_ui);
 
     Scheduler::execute_helper(context, sender, request.roots.clone(), 8);
     let roots: Vec<NodeKey> = request
@@ -303,7 +302,7 @@ impl Scheduler {
     };
 
     // Ran after printing the result of a console_rule.
-    (*LOG).stop_rendering();
+    LOG.stop_rendering();
 
     results
   }
@@ -314,7 +313,7 @@ impl Scheduler {
     tasks_to_display: &mut IndexMap<String, Duration>,
   ) {
     // Update the graph. To do that, we iterate over heavy hitters.
-    let heavy_hitters = graph.heavy_hitters(&roots, (*LOG).worker_count());
+    let heavy_hitters = graph.heavy_hitters(&roots, LOG.worker_count());
     // Insert every one in the set of tasks to display.
     // For tasks already here, the durations are overwritten.
     tasks_to_display.extend(heavy_hitters.clone().into_iter());
@@ -328,15 +327,15 @@ impl Scheduler {
     let ongoing_tasks = tasks_to_display;
     for (i, id) in ongoing_tasks.iter().enumerate() {
       // TODO Maybe we want to print something else besides the ID here.
-      (*LOG).update(i.to_string(), format!("{:?}", id));
+      LOG.update(i.to_string(), format!("{:?}", id));
     }
     // If the number of ongoing tasks is less than the number of workers,
     // fill the rest of the workers with empty string.
     // TODO(yic): further improve the UI. https://github.com/pantsbuild/pants/issues/6666
     for i in ongoing_tasks.len()..display_worker_count {
-      (*LOG).update(i.to_string(), "".to_string());
+      LOG.update(i.to_string(), "".to_string());
     }
-    (*LOG).render();
+    LOG.render();
   }
 }
 
