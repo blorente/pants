@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::io::Write;
-use std::io::{stdout, Result, Stdout};
+use std::io::{stderr, stdout, Result, Stdout};
 use std::thread;
 use std::time::Duration;
 
@@ -21,6 +21,30 @@ lazy_static! {
 pub struct MasterDisplay {
   inner: Mutex<EngineDisplay>,
   level: RwLock<log::LevelFilter>,
+}
+
+impl log::Log for MasterDisplay {
+  fn enabled(&self, metadata: &log::Metadata) -> bool {
+    metadata.level() <= *self.level.read()
+  }
+
+  fn log(&self, record: &log::Record) {
+    if !self.enabled(record.metadata()) {
+      return;
+    }
+    let message = format!("{}", record.args());
+    let inner_ref = &self.inner.lock();
+    if inner_ref.is_running() {
+      // TODO Eventually we want this to be more sophisticated, mimicking the python logger.
+      write!(stderr(), "{}", message);
+    } else {
+      inner_ref.log(message);
+    }
+  }
+
+  fn flush(&self) {
+    unimplemented!();
+  }
 }
 
 impl MasterDisplay {
@@ -91,25 +115,6 @@ impl MasterDisplay {
   }
 
   // TODO It would be nice to have a function get_display() -> &EngineDisplay, that returned some kind of reference, to avoid doing LOG.fun all the time.
-}
-
-impl log::Log for MasterDisplay {
-  fn enabled(&self, metadata: &log::Metadata) -> bool {
-    metadata.level() <= *self.level.read()
-  }
-
-  fn log(&self, record: &log::Record) {
-    if !self.enabled(record.metadata()) {
-      return;
-    }
-    let message = format!("{}", record.args());
-    let inner_ref = &self.inner.lock();
-    inner_ref.log(message);
-  }
-
-  fn flush(&self) {
-    unimplemented!();
-  }
 }
 
 enum Console {
