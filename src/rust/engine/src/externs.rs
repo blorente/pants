@@ -14,6 +14,8 @@ use interning::Interns;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use ui::display;
+use ui::PythonLogLevel;
+use ui::TryIntoPythonLogLevel;
 
 pub fn eval(python: &str) -> Result<Value, Failure> {
   with_externs(|e| (e.eval)(e.context, python.as_ptr(), python.len() as u64)).into()
@@ -242,6 +244,17 @@ lazy_static! {
   static ref INTERNS: RwLock<Interns> = RwLock::new(Interns::new());
 }
 
+// This is mut so that the max level can be set via set_externs.
+// It should only be set exactly once, and nothing should ever read it (it is only defined to
+// prevent the FfiLogger from being dropped).
+// In order to avoid a performance hit, there is no lock guarding it (because if it had a lock, it
+// would need to be acquired for every single logging statement).
+// Please don't mutate it.
+// Please.
+static mut LOGGER: FfiLogger = FfiLogger {
+  level_filter: log::LevelFilter::Off,
+};
+
 ///
 /// Set the static Externs for this process. All other methods of this module will fail
 /// until this has been called.
@@ -252,9 +265,13 @@ pub fn set_externs(externs: Externs) {
   let mut externs_ref = EXTERNS.write();
   *externs_ref = Some(externs);
 
-  // TODO This probably shouldn't be called here, since it no longer has anything to do with externs
-  // However, this is an easy place to ensure that it gets called only once.
-  display::MasterDisplay::init(log_level);
+  // TODO Comment to activate the V2 UI
+  unsafe {
+    LOGGER.init(log_level);
+  }
+
+  // TODO Uncomment to activate the V2 UI
+  //display::MasterDisplay::init(log_level);
 }
 
 fn with_externs<F, T>(f: F) -> T
@@ -595,54 +612,54 @@ where
   output
 }
 
-/////
-///// FfiLogger is an implementation of log::Log which asks the Python logging system to log via cffi.
-/////
-//struct FfiLogger {
-//  level_filter: log::LevelFilter,
-//}
-//
-//impl FfiLogger {
-//  // init must only be called once in the lifetime of the program. No other loggers may be init'd.
-//  // If either of the above are violated, expect a panic.
-//  pub fn init(&'static mut self, max_level: u8) {
-//    let max_python_level = max_level.try_into_PythonLogLevel();
-//    self.level_filter = {
-//      match max_python_level {
-//        Ok(python_level) => {
-//          let level: log::LevelFilter = python_level.into();
-//          level
-//        }
-//        Err(err) => panic!("Unrecognised log level from python: {}: {}", max_level, err),
-//      }
-//    };
-//
-//    log::set_max_level(self.level_filter);
-//    log::set_logger(self)
-//      .expect("Failed to set logger (maybe you tried to call init multiple times?)");
-//  }
-//}
-//
-//impl log::Log for FfiLogger {
-//  fn enabled(&self, metadata: &log::Metadata) -> bool {
-//    metadata.level() <= self.level_filter
-//  }
-//
-//  fn log(&self, record: &log::Record) {
-//    if !self.enabled(record.metadata()) {
-//      return;
-//    }
-//    let level: PythonLogLevel = record.level().into();
-//    let message = format!("{}", record.args());
-//    with_externs(|e| {
-//      (e.log)(
-//        e.context,
-//        level as u8,
-//        message.as_ptr(),
-//        message.len() as u64,
-//      )
-//    })
-//  }
-//
-//  fn flush(&self) {}
-//}
+///
+/// FfiLogger is an implementation of log::Log which asks the Python logging system to log via cffi.
+///
+struct FfiLogger {
+  level_filter: log::LevelFilter,
+}
+
+impl FfiLogger {
+  // init must only be called once in the lifetime of the program. No other loggers may be init'd.
+  // If either of the above are violated, expect a panic.
+  pub fn init(&'static mut self, max_level: u8) {
+    let max_python_level = max_level.try_into_PythonLogLevel();
+    self.level_filter = {
+      match max_python_level {
+        Ok(python_level) => {
+          let level: log::LevelFilter = python_level.into();
+          level
+        }
+        Err(err) => panic!("Unrecognised log level from python: {}: {}", max_level, err),
+      }
+    };
+
+    log::set_max_level(self.level_filter);
+    log::set_logger(self)
+      .expect("Failed to set logger (maybe you tried to call init multiple times?)");
+  }
+}
+
+impl log::Log for FfiLogger {
+  fn enabled(&self, metadata: &log::Metadata) -> bool {
+    metadata.level() <= self.level_filter
+  }
+
+  fn log(&self, record: &log::Record) {
+    if !self.enabled(record.metadata()) {
+      return;
+    }
+    let level: PythonLogLevel = record.level().into();
+    let message = format!("{}", record.args());
+    with_externs(|e| {
+      (e.log)(
+        e.context,
+        level as u8,
+        message.as_ptr(),
+        message.len() as u64,
+      )
+    })
+  }
+
+  fn flush(&self) {}
+}
