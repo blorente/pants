@@ -13,7 +13,6 @@ use handles::{DroppingHandle, Handle};
 use interning::Interns;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
-use ui::display;
 use ui::PythonLogLevel;
 use ui::TryIntoPythonLogLevel;
 
