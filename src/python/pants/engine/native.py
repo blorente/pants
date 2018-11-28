@@ -667,6 +667,19 @@ class Native(Singleton):
     result = self.lib.decompress_tarball(tarfile_path, dest_dir)
     return self.context.raise_or_return(result)
 
+  def setup_pantsd_logger(self, log_file_path, level):
+    result = self.lib.setup_pantsd_logger(log_file_path, level)
+    return self.context.raise_or_return(result)
+
+  def setup_stderr_logger(self, level):
+    self.lib.setup_stderr_logger(level)
+
+  def write_log(self, msg, level, target):
+    self.lib.write_log(msg, level, target)
+
+  def set_max_log_level(self, level):
+    self.lib.set_max_log_level(level)
+
   def new_tasks(self):
     return self.gc(self.lib.tasks_create(), self.lib.tasks_destroy)
 

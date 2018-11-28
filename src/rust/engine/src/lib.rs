@@ -47,6 +47,22 @@ mod selectors;
 mod tasks;
 mod types;
 
+use bytes;
+
+use fs;
+use futures;
+
+use hashing;
+
+use log;
+
+use process_execution;
+
+use reqwest;
+
+use tar_api;
+
+use std::borrow::Borrow;
 use std::ffi::CStr;
 use std::fs::File;
 use std::io;
@@ -73,6 +89,7 @@ use crate::types::Types;
 use futures::Future;
 use hashing::Digest;
 use log::error;
+use logging::logger::LOGGER;
 
 // TODO: Consider renaming and making generic for collections of PyResults.
 #[repr(C)]
@@ -768,6 +785,36 @@ pub extern "C" fn materialize_directories(
   .map(|_| ())
   .wait()
   .into()
+}
+
+#[no_mangle]
+pub extern "C" fn setup_pantsd_logger(log_file_ptr: *const raw::c_char, level: u64) -> PyResult {
+  let path_str = unsafe { CStr::from_ptr(log_file_ptr).to_string_lossy().into_owned() };
+  let path = PathBuf::from(path_str);
+  LOGGER.set_pantsd_logger(path, level).into()
+}
+
+#[no_mangle]
+pub extern "C" fn setup_stderr_logger(level: u64) {
+  LOGGER
+    .set_stderr_logger(level)
+    .expect("Error setting up STDERR logger");
+}
+
+#[no_mangle]
+pub extern "C" fn write_log(msg: *const raw::c_char, level: u64, target: *const raw::c_char) {
+  let message_str = unsafe { CStr::from_ptr(msg).to_string_lossy() };
+  let target_str = unsafe { CStr::from_ptr(target).to_string_lossy() };
+  LOGGER
+    .log_from_python(message_str.borrow(), level, target_str.borrow())
+    .expect("Error logging message");
+}
+
+#[no_mangle]
+pub extern "C" fn set_max_log_level(level: u64) {
+  LOGGER
+    .set_max_level_from_python(level)
+    .expect("Error setting level {} from python");
 }
 
 fn graph_full(scheduler: &Scheduler, subject_types: Vec<TypeId>) -> RuleGraph {

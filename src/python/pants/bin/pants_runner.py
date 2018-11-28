@@ -11,6 +11,7 @@ from builtins import object
 
 from pants.base.exception_sink import ExceptionSink
 from pants.bin.remote_pants_runner import RemotePantsRunner
+from pants.init.logging import setup_logging_to_stderr
 from pants.option.options_bootstrapper import OptionsBootstrapper
 
 
@@ -32,6 +33,8 @@ class PantsRunner(object):
     self._start_time = start_time
 
   def run(self):
+    setup_logging_to_stderr(logger, 'TRACE')
+
     # Register our exiter at the beginning of the run() method so that any code in this process from
     # this point onwards will use that exiter in the case of a fatal error.
     ExceptionSink.reset_exiter(self._exiter)
@@ -51,6 +54,10 @@ class PantsRunner(object):
 
     # N.B. Inlining this import speeds up the python thin client run by about 100ms.
     from pants.bin.local_pants_runner import LocalPantsRunner
+
+    # TODO There is some logging that we miss before this line in this function.
+    # I thought it should show up since we don't override the log handlers until later,
+    # should investigate later.
 
     runner = LocalPantsRunner.create(
         self._exiter,

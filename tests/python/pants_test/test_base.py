@@ -669,6 +669,7 @@ class TestBase(unittest.TestCase):
 
     handler = self.LoggingRecorder()
     root_logger.addHandler(handler)
+
     try:
       yield handler
     finally:

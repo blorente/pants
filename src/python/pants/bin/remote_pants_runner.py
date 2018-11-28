@@ -15,6 +15,7 @@ from future.utils import PY3, raise_with_traceback
 
 from pants.base.exception_sink import ExceptionSink
 from pants.console.stty_utils import STTYSettings
+from pants.init.logging import setup_logging_to_stderr
 from pants.java.nailgun_client import NailgunClient
 from pants.java.nailgun_protocol import NailgunProtocol
 from pants.pantsd.pants_daemon import PantsDaemon
@@ -81,19 +82,6 @@ class RemotePantsRunner(object):
       signal.signal(signal.SIGINT, existing_sigint_handler)
       signal.signal(signal.SIGQUIT, existing_sigquit_handler)
 
-  def _setup_logging(self):
-    """Sets up basic stdio logging for the thin client."""
-    log_level = logging.getLevelName(self._bootstrap_options.for_global_scope().level.upper())
-
-    formatter = logging.Formatter('%(levelname)s] %(message)s')
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setLevel(log_level)
-    handler.setFormatter(formatter)
-
-    root = logging.getLogger()
-    root.setLevel(log_level)
-    root.addHandler(handler)
-
   @staticmethod
   def _backoff(attempt):
     """Minimal backoff strategy for daemon restarts."""
@@ -106,6 +94,9 @@ class RemotePantsRunner(object):
     """
     attempt = 1
     while 1:
+      # TODO This should print to stderr with the thin client, but it doesn't.
+      # It goes through the ffi correctly, my guess is that we have deviated stderr somewhere
+      # without meaning to.
       logger.debug(
         'connecting to pantsd on port {} (attempt {}/{})'
         .format(pantsd_handle.port, attempt, retries)
@@ -183,6 +174,10 @@ class RemotePantsRunner(object):
 
   def _maybe_launch_pantsd(self):
     return PantsDaemon.Factory.maybe_launch(options_bootstrapper=self._options_bootstrapper)
+
+  def _setup_logging(self):
+    log_level = logging.getLevelName(self._bootstrap_options.for_global_scope().level.upper())
+    setup_logging_to_stderr(logger, log_level)
 
   def run(self, args=None):
     self._setup_logging()

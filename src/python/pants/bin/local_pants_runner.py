@@ -40,12 +40,13 @@ class LocalPantsRunner(object):
     return options, build_config, options_bootstrapper
 
   @staticmethod
-  def _maybe_init_graph_session(graph_session, options_bootstrapper,build_config, global_options):
+  def _maybe_init_graph_session(graph_session, options_bootstrapper, build_config, global_options):
     if graph_session:
       return graph_session
 
     native = Native()
     native.set_panic_handler()
+
     graph_scheduler_helper = EngineInitializer.setup_legacy_graph(
       native,
       options_bootstrapper,
@@ -86,8 +87,8 @@ class LocalPantsRunner(object):
     options, build_config, options_bootstrapper = cls.parse_options(
       args,
       env,
-      True,
-      options_bootstrapper
+      setup_logging=True,
+      options_bootstrapper=options_bootstrapper,
     )
     global_options = options.for_global_scope()
 
@@ -178,6 +179,7 @@ class LocalPantsRunner(object):
       self._target_roots,
       self._exiter
     )
+
     return goal_runner_factory.create().run()
 
   def _maybe_run_v2(self):

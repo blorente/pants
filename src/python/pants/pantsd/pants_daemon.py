@@ -299,7 +299,7 @@ class PantsDaemon(FingerprintedProcessManager):
     # for further forks.
     with stdio_as(stdin_fd=-1, stdout_fd=-1, stderr_fd=-1):
       # Reinitialize logging for the daemon context.
-      result = setup_logging(self._log_level, log_dir=self._log_dir, log_name=self.LOG_NAME)
+      result = setup_logging(self._log_level, log_dir=self._log_dir, log_name=self.LOG_NAME, native=self._native)
 
       # Do a python-level redirect of stdout/stderr, which will not disturb `0,1,2`.
       # TODO: Consider giving these pipes/actual fds, in order to make them "deep" replacements
