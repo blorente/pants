@@ -1,0 +1,71 @@
+{
+  "//:scala-library-synthetic": {
+    "cost": 0,
+    "cost_transitive": 0,
+    "dependencies": [],
+    "products_total": 3866
+  },
+  "testprojects/cooldeps/test_project/A:A": {
+    "cost": 73,
+    "cost_transitive": 213,
+    "dependencies": [
+      {
+        "aliases": [],
+        "dependency_type": "unused",
+        "products_used": 0,
+        "products_used_ratio": 0.0,
+        "target": "testprojects/cooldeps/test_project/B:B"
+      },
+      {
+        "aliases": [],
+        "dependency_type": "declared",
+        "products_used": 0,
+        "products_used_ratio": 1.0,
+        "target": "//:scala-library-synthetic"
+      },
+      {
+        "aliases": [],
+        "dependency_type": "undeclared",
+        "products_used": 1,
+        "products_used_ratio": 0.14285714285714285,
+        "target": "testprojects/cooldeps/test_project/C:C"
+      }
+    ],
+    "products_total": 5
+  },
+  "testprojects/cooldeps/test_project/B:B": {
+    "cost": 73,
+    "cost_transitive": 140,
+    "dependencies": [
+      {
+        "aliases": [],
+        "dependency_type": "declared",
+        "products_used": 0,
+        "products_used_ratio": 1.0,
+        "target": "//:scala-library-synthetic"
+      },
+      {
+        "aliases": [],
+        "dependency_type": "declared",
+        "products_used": 1,
+        "products_used_ratio": 0.14285714285714285,
+        "target": "testprojects/cooldeps/test_project/C:C"
+      }
+    ],
+    "products_total": 5
+  },
+  "testprojects/cooldeps/test_project/C:C": {
+    "cost": 67,
+    "cost_transitive": 67,
+    "dependencies": [
+      {
+        "aliases": [],
+        "dependency_type": "declared",
+        "products_used": 0,
+        "products_used_ratio": 1.0,
+        "target": "//:scala-library-synthetic"
+      }
+    ],
+    "products_total": 7
+  }
+}
