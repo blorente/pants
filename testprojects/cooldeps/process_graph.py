@@ -5,10 +5,12 @@ from pprint import pprint
 
 json_file = sys.argv[1]
 
-path_to_buildozer = "~/workspace/source/pants-support/buildifier/bin/buildozer"
+path_to_buildozer = "./pants-support/buildifier/bin/buildozer"
 
 def build_command(action, dependency):
-  return "'" + action + " dependencies " + dependency + "'"
+  cmd = "'" + action + " dependencies " + dependency + "'"
+  print("command = ", cmd, "\n")
+  return cmd
 
 def add_dependency(toAdd, target):
   print("ADD: toAdd = ", toAdd, "to target = ", target, "\n")
@@ -31,9 +33,9 @@ with open(json_file) as f:
     dependencies = payload["dependencies"]
     for dep in dependencies:
       if dep["dependency_type"] == "undeclared":
-        addDependency(dep["target"], target)
+        add_dependency(dep["target"], target)
       if dep["dependency_type"] == 'unused':
-        removeDependency(dep["target"], target)
+        remove_dependency(dep["target"], target)
 
   #print(targets_and_dependencies)
 
