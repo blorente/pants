@@ -1,4 +1,4 @@
 scala_library(
 		name="A",
-		dependencies=['test_project/B']
+		dependencies=['testprojects/cooldeps/test_project/B']
 )

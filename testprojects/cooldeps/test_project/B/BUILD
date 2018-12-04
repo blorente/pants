@@ -1,3 +1,4 @@
 scala_library (
-		name = "B"
+		name = "B",
+		dependencies = ["testprojects/cooldeps/test_project/C"]
 )
