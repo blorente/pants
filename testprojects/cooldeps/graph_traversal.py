@@ -18,8 +18,12 @@ class Graph(object):
     if visited is None:
       visited = set()
     visited.add(start)
-    for next in self.graph[start].set_of_outgoing_edges() - visited:
-      removed = self.dfs(next, process_node, visited)
-    currently_removed = process_node(start)
-    return removed.union(currently_removed)
+    removed = set()
+    to_visit = self.graph[start].set_of_outgoing_edges() - visited
+    while to_visit:
+      next = to_visit.pop()
+      removed, visited_by_children = self.dfs(next, process_node, visited)
+      to_visit = to_visit - visited_by_children
+    removed_by_this_node = process_node(start)
+    return removed.union(removed_by_this_node), visited
 

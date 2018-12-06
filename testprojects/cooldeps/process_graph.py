@@ -55,13 +55,14 @@ def extract_info(dependencies):
     outgoing_edges[target] = {}
     for dependency in payload["dependencies"]:
       outgoing_edges[target].update({dependency["target"]: dependency["dependency_type"]})
+  return outgoing_edges
 
 with open(universe) as f, open(direct_dependees) as g:
   dependencies = json.load(f)
   dependees = json.load(g)
   processed_dependencies = extract_info(dependencies)
 
-  graph = Graph(dependencies, dependees)
+  graph = Graph(processed_dependencies, dependees)
 
   graph.dfs(target, process_node, set())
 
