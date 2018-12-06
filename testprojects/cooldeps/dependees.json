@@ -1,0 +1,8 @@
+{
+    "testprojects/cooldeps/test_project/B:B": [
+        "testprojects/cooldeps/test_project/A:A"
+    ],
+    "testprojects/cooldeps/test_project/C:C": [
+        "testprojects/cooldeps/test_project/B:B"
+    ]
+}
