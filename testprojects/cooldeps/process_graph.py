@@ -7,7 +7,7 @@ from graph_traversal import Graph
 path_to_buildozer = "pants-support/buildifier/bin/buildozer"
 add_action = "add dependencies "
 remove_action = "remove dependencies "
-strict_deps_action = "print strict deps"
+strict_deps_action = "print strict_deps"
 
 # read the dep-usage graph
 universe = sys.argv[1]
@@ -22,31 +22,54 @@ def build_command(action, dependency):
   # buildozer doesn't recognize a pattern of type "a/target/T:T"
   # in which case the last part needs to be removed
   parts = dependency.split(":")
-  if parts[0].endswith(parts[1]):
+  if dependency and parts[0].endswith(parts[1]):
     dependency = parts[0]
   return ' "' + action + dependency + '" '
 
 def call_buildozer(action, dependency, target):
   cmd = build_command(action, dependency)
   full_cmd = " ".join([path_to_buildozer, cmd, target])
-  subprocess.run(full_cmd, shell=True)
+  result = subprocess.run(full_cmd, shell=True, stdout=subprocess.PIPE)
+  if result.returncode > 1:
+    return None
+  else:
+    return result.stdout.decode("utf-8")
 
 def add_dependency(dependency, target):
-  print("ADD: toAdd = ", toAdd, "to target = ", target, "\n")
+  print("ADD: toAdd = ", dependency, "to target = ", target)
   call_buildozer(add_action, dependency, target)
 
-
 def remove_dependency(dependency, target):
-  print("DEL: toRemove = ", toRemove, " from target = ", target, "\n")
+  print("DEL: toRemove = ", dependency, " from target = ", target)
   call_buildozer(remove_action, dependency, target)
 
-def process_node(start):
+def has_strict_deps_enabled(target):
+  print("STRICT?: are strict deps enabled for {}".format(target))
+  return bool(call_buildozer(strict_deps_action, "", target))
+
+def process_node(node, universe):
+  print("Processed node: " + node.name)
+  removed_deps = set()
+
   # go through its dependencies and
-  # 1. add undeclared dependencies
-  # 2. remove unused dependencies
-  # 3. store unused dependencies 
-  # 4. return them
-  print("Processed node: " + start)
+  for dep_name, dep_type in node.outgoing_edges.items():
+    # 1. add undeclared dependencies
+    if dep_type == "undeclared":
+      add_dependency(dep_name, target)
+    if dep_type == 'unused':
+      # 2. remove unused dependencies
+      remove_dependency(dep_name, target)
+      # 3. store unused dependencies
+      removed_deps.add(dep_name)
+
+  # 4. Add removed dependencies to direct dependees outside of the universe
+  for dependee in node.incoming_edges - universe:
+    # 4.1. If strict_deps is not enabled
+    if not has_strict_deps_enabled(dependee):
+      for removed_dep in removed_deps:
+        add_dependency(removed_dep, dependee)
+
+  # 5. return them
   return set()
 
 def extract_info(dependencies):
