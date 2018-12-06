@@ -46,9 +46,9 @@
       },
       {
         "aliases": [],
-        "dependency_type": "declared",
-        "products_used": 1,
-        "products_used_ratio": 0.14285714285714285,
+        "dependency_type": "unused",
+        "products_used": 0,
+        "products_used_ratio": 0,
         "target": "testprojects/cooldeps/test_project/C:C"
       }
     ],
