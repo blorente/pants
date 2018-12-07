@@ -22,8 +22,9 @@ class Graph(object):
     to_visit = self.graph[start].set_of_outgoing_edges() - visited
     while to_visit:
       next = to_visit.pop()
-      removed, visited_by_children = self.dfs(next, process_node, visited)
+      removed_by_children, visited_by_children = self.dfs(next, process_node, visited)
+      removed |= removed_by_children
       to_visit = to_visit - visited_by_children
-    removed_by_this_node = process_node(self.graph[start], set(self.graph.keys()))
+    removed_by_this_node = process_node(self.graph[start], set(self.graph.keys()), removed)
     return removed.union(removed_by_this_node), visited
 
