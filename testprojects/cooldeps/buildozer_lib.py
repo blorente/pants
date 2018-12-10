@@ -23,11 +23,11 @@ def call_buildozer(action, dependency, target):
     return result.stdout.decode("utf-8")
 
 def add_dependency(dependency, target):
-  print("ADD: toAdd = ", dependency, "to target = ", target)
+  # print("ADD: toAdd = ", dependency, "to target = ", target)
   call_buildozer(add_action, dependency, target)
 
 def remove_dependency(dependency, target):
-  print("DEL: toRemove = ", dependency, " from target = ", target)
+  # print("DEL: toRemove = ", dependency, " from target = ", target)
   call_buildozer(remove_action, dependency, target)
 
 def has_strict_deps_enabled(target):

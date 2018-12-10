@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3
 import json
 
-from argument_parsing import parse_cli
+from argument_parsing import parse_cli, tcolors
 from buildozer_lib import add_dependency, enable_strict_deps, remove_dependency
 from graph_traversal import Graph
 
@@ -9,7 +9,6 @@ processed_nodes = 0
 def process_node(node, universe, deps_removed_by_dependencies):
   global processed_nodes
   processed_nodes += 1
-  print("Processed node = {}, which is {}%".format(node.name, 100.0 * float(processed_nodes)/float(len(universe))))
   if node.name.startswith("3rdparty") or node.name.startswith("//:"):
     print("Processing 3rdparty. Stopping early.")
     return deps_removed_by_dependencies
@@ -34,6 +33,7 @@ def process_node(node, universe, deps_removed_by_dependencies):
     for removed_dep in dependencies_to_remove:
       add_dependency(removed_dep, dependee)
 
+  print("Processed node: {}".format(node.name))
   # 5. return them
   return dependencies_to_remove
 
@@ -56,7 +56,6 @@ def process_graph(args):
     process_node(target_node, set(graph.graph.keys()), set())
     if args.enable_strict_deps:
       enable_strict_deps(args.target)
-
 
 if __name__ == "__main__":
   args = parse_cli()

@@ -1,3 +1,5 @@
+#!/usr/local/bin/python3
+
 import subprocess
 import os
 from argument_parsing import parse_cli,tcolors
@@ -50,6 +52,8 @@ if not os.path.exists(dependees_output_path):
   call_dependees(target, dependees_output_path)
 
 process_graph(args)
+
+print(tcolors.BOLD, tcolors.OKGREEN, "DONE", tcolors.ENDC)
 
 
 
