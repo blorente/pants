@@ -68,7 +68,18 @@ class PythonBinaryCreate(Task):
     super(PythonBinaryCreate, self).__init__(*args, **kwargs)
     self._distdir = self.get_options().pants_distdir
 
+  def print_platforms(self):
+    def info(message):
+      self.context.log.info(message)
+
+    platforms = self.context.options.for_scope("python-setup").platforms
+    info("Plaforms for python-setup")
+    for platform in platforms:
+      info("Platform: {}".format(platform))
+
   def execute(self):
+    self.print_platforms()
+
     binaries = self.context.targets(self.is_binary)
 
     # Check for duplicate binary names, since we write the pexes to <dist>/<name>.pex.
@@ -150,6 +161,7 @@ class PythonBinaryCreate(Task):
       # We need to ensure that we are resolving for only the current platform if we are
       # including local python dist targets that have native extensions.
       self._python_native_code_settings.check_build_for_current_platform_only(self.context.targets())
+      self.context.log.info("Add requirements to {} for platforms {}".format(binary_tgt.name, binary_tgt.platforms))
       pex_builder.add_requirement_libs_from(req_tgts, platforms=binary_tgt.platforms)
 
       # Build the .pex file.
