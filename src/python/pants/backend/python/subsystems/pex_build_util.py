@@ -185,6 +185,7 @@ class PexBuilderWrapper(object):
     fetchers.extend(Fetcher([path]) for path in find_links)
 
     for platform in platforms:
+      self._log.info("BL: Resolving {} for platform {}".format(requirements, platform))
       requirements_cache_dir = os.path.join(python_setup.resolver_cache_dir,
         str(interpreter.identity))
       resolved_dists = resolve(
