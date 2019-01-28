@@ -41,14 +41,18 @@ def _maybe_configure_extended_logging(logger):
   if logger.isEnabledFor(TRACE):
     _configure_requests_debug_logging()
 
+def init_rust_logger(level):
+  native = Native()
+  levelno = get_numeric_level(level)
+  native.init_rust_logging(levelno)
+
 def setup_logging_to_stderr(python_logger, level):
   native = Native()
   levelno = get_numeric_level(level)
-  handler = setup_native_logging_to_stderr(levelno, native, stream=sys.stderr)
+  handler = create_native_stderr_log_handler(levelno, native, stream=sys.stderr)
   native.set_max_log_level(levelno)
   python_logger.addHandler(handler)
-  python_logger.setLevel(level)
-
+  python_logger.setLevel("TRACE")
 
 def setup_logging_from_options(bootstrap_options):
   # N.B. quiet help says 'Squelches all console output apart from errors'.
@@ -69,7 +73,7 @@ class NativeHandler(StreamHandler):
     msg = ("{}".format(self.format(record))).encode("utf-8")
     self.native.write_log(msg, record.levelno, record.name.encode("utf-8"))
 
-def setup_native_logging_to_pantsd_file(level, native, native_filename):
+def create_native_pantsd_file_log_handler(level, native, native_filename):
   try:
     native.setup_pantsd_logger(native_filename.encode("utf-8"), get_numeric_level(level))
   except Exception as e:
@@ -79,7 +83,7 @@ def setup_native_logging_to_pantsd_file(level, native, native_filename):
   return NativeHandler(level, native)
 
 
-def setup_native_logging_to_stderr(level, native, stream=None):
+def create_native_stderr_log_handler(level, native, stream=None):
   try:
     native.setup_stderr_logger(get_numeric_level(level))
   except Exception as e:
@@ -137,14 +141,14 @@ def setup_logging(level, console_stream=None, log_dir=None, scope=None, log_name
     logger.removeHandler(handler)
 
   if console_stream:
-    native_handler = setup_native_logging_to_stderr(level, native, stream=console_stream)
+    native_handler = create_native_stderr_log_handler(level, native, stream=console_stream)
     logger.addHandler(native_handler)
 
   if log_dir:
     safe_mkdir(log_dir)
     log_filename = os.path.join(log_dir, log_name or 'pants.log')
 
-    native_handler = setup_native_logging_to_pantsd_file(level, native, log_filename)
+    native_handler = create_native_pantsd_file_log_handler(level, native, log_filename)
     file_handler = native_handler
     logger.addHandler(native_handler)
 

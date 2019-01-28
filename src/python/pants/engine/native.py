@@ -667,6 +667,9 @@ class Native(Singleton):
     result = self.lib.decompress_tarball(tarfile_path, dest_dir)
     return self.context.raise_or_return(result)
 
+  def init_rust_logging(self, level):
+    self.lib.init_logging(level)
+
   def setup_pantsd_logger(self, log_file_path, level):
     result = self.lib.setup_pantsd_logger(log_file_path, level)
     return self.context.raise_or_return(result)

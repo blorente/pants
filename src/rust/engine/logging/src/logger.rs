@@ -32,8 +32,8 @@ impl Logger {
   // TODO Maybe return a Result<(), String> which we pass to Python as a PyResult.
   // This is not possible atm because this function gets called before the externs
   // are initialized.
-  pub fn init(max_level: u8) {
-    let max_python_level = (u64::from(max_level)).try_into_PythonLogLevel();
+  pub fn init(max_level: u64) {
+    let max_python_level = (max_level).try_into_PythonLogLevel();
     match max_python_level {
       Ok(python_level) => {
         let level: log::LevelFilter = python_level.into();

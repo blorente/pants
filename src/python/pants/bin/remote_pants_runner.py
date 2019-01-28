@@ -15,7 +15,6 @@ from future.utils import PY3, raise_with_traceback
 
 from pants.base.exception_sink import ExceptionSink
 from pants.console.stty_utils import STTYSettings
-from pants.init.logging import setup_logging_to_stderr
 from pants.java.nailgun_client import NailgunClient
 from pants.java.nailgun_protocol import NailgunProtocol
 from pants.pantsd.pants_daemon import PantsDaemon
@@ -175,11 +174,6 @@ class RemotePantsRunner(object):
   def _maybe_launch_pantsd(self):
     return PantsDaemon.Factory.maybe_launch(options_bootstrapper=self._options_bootstrapper)
 
-  def _setup_logging(self):
-    log_level = logging.getLevelName(self._bootstrap_options.for_global_scope().level.upper())
-    setup_logging_to_stderr(logger, log_level)
-
   def run(self, args=None):
-    self._setup_logging()
     pantsd_handle = self._maybe_launch_pantsd()
     self._run_pants_with_retry(pantsd_handle)

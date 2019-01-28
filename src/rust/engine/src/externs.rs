@@ -14,8 +14,6 @@ use crate::interning::Interns;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 
-use logging::Logger;
-
 pub fn eval(python: &str) -> Result<Value, Failure> {
   with_externs(|e| (e.eval)(e.context, python.as_ptr(), python.len() as u64)).into()
 }
@@ -281,10 +279,8 @@ lazy_static! {
 /// until this has been called.
 ///
 pub fn set_externs(externs: Externs) {
-  let log_level = externs.log_level;
   let mut externs_ref = EXTERNS.write();
   *externs_ref = Some(externs);
-  Logger::init(log_level);
 }
 
 fn with_externs<F, T>(f: F) -> T

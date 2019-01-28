@@ -19,7 +19,7 @@ from pants.base.exiter import Exiter
 from pants.bin.daemon_pants_runner import DaemonPantsRunner
 from pants.engine.native import Native
 from pants.init.engine_initializer import EngineInitializer
-from pants.init.logging import setup_logging
+from pants.init.logging import setup_logging, init_rust_logger
 from pants.init.options_initializer import BuildConfigInitializer
 from pants.option.arg_splitter import GLOBAL_SCOPE
 from pants.option.options_bootstrapper import OptionsBootstrapper
@@ -299,6 +299,7 @@ class PantsDaemon(FingerprintedProcessManager):
     # for further forks.
     with stdio_as(stdin_fd=-1, stdout_fd=-1, stderr_fd=-1):
       # Reinitialize logging for the daemon context.
+      init_rust_logger(self._log_level)
       result = setup_logging(self._log_level, log_dir=self._log_dir, log_name=self.LOG_NAME, native=self._native)
 
       # Do a python-level redirect of stdout/stderr, which will not disturb `0,1,2`.

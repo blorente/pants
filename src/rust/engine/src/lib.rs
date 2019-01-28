@@ -47,18 +47,12 @@ mod selectors;
 mod tasks;
 mod types;
 
-use bytes;
-
 use fs;
 use futures;
 
 use hashing;
 
 use log;
-
-use process_execution;
-
-use reqwest;
 
 use tar_api;
 
@@ -90,6 +84,7 @@ use futures::Future;
 use hashing::Digest;
 use log::error;
 use logging::logger::LOGGER;
+use logging::Logger;
 
 // TODO: Consider renaming and making generic for collections of PyResults.
 #[repr(C)]
@@ -785,6 +780,13 @@ pub extern "C" fn materialize_directories(
   .map(|_| ())
   .wait()
   .into()
+}
+
+// This is called before externs are set up, so we cannot return a PyResult
+#[no_mangle]
+pub extern "C" fn init_logging(level: u64) {
+  Logger::init(level);
+  log::debug!("Rust logger initialized with level {}", level);
 }
 
 #[no_mangle]
