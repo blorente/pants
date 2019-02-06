@@ -75,6 +75,12 @@ impl Logger {
     python_level: u64,
     target: &str,
   ) -> Result<(), String> {
+    let a = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(PathBuf::from("/tmp/rlog"))
+        .map(|mut file|
+            file.write(format!("BL: log_from_python: {:?}, level {:?}, max_level {:?}\n", message, python_level, log::max_level()).as_ref()).expect("error")).expect("error");
     python_level.try_into_PythonLogLevel().map(|level| {
       log!(target: target, level.into(), "{}", message);
     })
@@ -92,6 +98,12 @@ impl Log for Logger {
   fn log(&self, record: &Record) {
     self.stderr_log.lock().log(record);
     self.pantsd_log.lock().log(record);
+    let a = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(PathBuf::from("/tmp/rlog"))
+        .map(|mut file|
+            file.write(format!("BL: Logger::log() with level {:?}, msg: {:?}\n", record.level(), record.args()).as_ref()).expect("error")).expect("error");
   }
 
   fn flush(&self) {
@@ -142,7 +154,20 @@ impl<W: Write + Send + 'static> Log for MaybeWriteLogger<W> {
       return;
     }
     if let Some(ref logger) = self.inner {
+      let a = OpenOptions::new()
+          .create(true)
+          .append(true)
+          .open(PathBuf::from("/tmp/rlog"))
+          .map(|mut file|
+              file.write(format!("BL: logging with level {:?}, msg: {:?}\n", record.level(), record.args()).as_ref()).expect("error")).expect("error");
       logger.log(record);
+    } else {
+      let a = OpenOptions::new()
+          .create(true)
+          .append(true)
+          .open(PathBuf::from("/tmp/rlog"))
+          .map(|mut file|
+              file.write(format!("BL: failed to log with level {:?}, msg: {:?}\n", record.level(), record.args()).as_ref()).expect("error")).expect("error");
     }
   }
 

@@ -59,6 +59,9 @@ def setup_logging_from_options(bootstrap_options):
   level = 'ERROR' if bootstrap_options.quiet else bootstrap_options.level.upper()
   # TODO This assumes creating a native is cheap and idempotent, which I think is true.
   native = Native()
+
+  with open("/tmp/log", "a") as f:
+    f.write("BL: setup_logging_from_options")
   return setup_logging(level, console_stream=sys.stderr, log_dir=bootstrap_options.logdir, native=native)
 
 
@@ -128,6 +131,11 @@ def setup_logging(level, console_stream=None, log_dir=None, scope=None, log_name
 
   log_filename = None
   file_handler = None
+
+  with open("/tmp/log", "a") as f:
+    f.write("BL: setup_logging with log_name {}, console_stream {}, log_dir {}, level {}\n".format(
+      log_name, console_stream, log_dir, level
+    ))
 
   # A custom log handler for sub-debug trace logging.
   def trace(self, message, *args, **kwargs):
