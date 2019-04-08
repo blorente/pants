@@ -110,10 +110,12 @@ class PantsDaemon(FingerprintedProcessManager):
       :returns: A Handle for the running pantsd instance.
       :rtype: PantsDaemon.Handle
       """
+      # STUB INIT
       stub_pantsd = cls.create(options_bootstrapper, full_init=False)
       with stub_pantsd._services.lifecycle_lock:
         if stub_pantsd.needs_restart(stub_pantsd.options_fingerprint):
           # Once we determine we actually need to launch, recreate with full initialization.
+          # FULL INIT
           pantsd = cls.create(options_bootstrapper)
           return pantsd.launch()
         else:

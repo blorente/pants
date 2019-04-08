@@ -75,7 +75,7 @@ class PythonBinaryIntegrationTest(PantsRunIntegrationTest):
       self.assert_success(build())
       self.assert_pex_attribute(test_pex, 'zip_safe', True)
 
-  @daemon_blacklist('TODO: See the point about watchman in #7320.')
+  # @daemon_blacklist('TODO: See the point about watchman in #7320.')
   def test_platform_defaults_to_config(self):
     self.platforms_test_impl(
       target_platforms=None,

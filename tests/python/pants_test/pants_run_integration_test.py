@@ -121,7 +121,7 @@ def daemon_blacklist(_unused_msg_for_documentation_purposes=None):
   return decorator
 
 
-def no_shutdown_between_runs(_unused_msg_for_documentation_purposes=None):
+def no_pantsd_shutdown_between_runs(_unused_msg_for_documentation_purposes=None):
   """
   A decorator to ensure we don't leak an external value for PANTS_SHUTDOWN_PANTSD_AFTER_RUN.
 
@@ -138,20 +138,6 @@ def no_shutdown_between_runs(_unused_msg_for_documentation_purposes=None):
         f(self, *args, **kwargs)
     return wrapper
   return decorator
-
-
-def skip_if_tests_are_hermetic(pants_run_integration_test_cls, _unused_msg_for_documentation_purposes=None):
-  def decorator(f):
-    def wrapper(self, *args, **kwargs):
-      are_pantsd_tests_hermetic = pants_run_integration_test_cls.hermetic()
-      print("BL: are_pantsd_tests_hermetics: {}".format(are_pantsd_tests_hermetic))
-      if not are_pantsd_tests_hermetic:
-        return f(self, *args, **kwargs)
-      else:
-        print("Ignoring test because it will fail when run hermetically.")
-    return wrapper
-  return decorator
-
 
 def ensure_daemon(f):
   """A decorator for running an integration test with and without the daemon enabled."""
@@ -596,10 +582,11 @@ class PantsRunIntegrationTest(unittest.TestCase):
                      'pants.ini',
                      'pants.travis-ci.ini',
                      'rust-toolchain',
-                     'src')
+                     'src',
+                     '.python-interpreter-constraints')
     dirs_to_copy = ('3rdparty', 'contrib') + tuple(dirs_to_copy or [])
 
-    with self.temporary_workdir() as tmp_dir:
+    with self.temporary_workdir(cleanup=False) as tmp_dir:
       for filename in files_to_copy:
         shutil.copy(os.path.join(get_buildroot(), filename), os.path.join(tmp_dir, filename))
 

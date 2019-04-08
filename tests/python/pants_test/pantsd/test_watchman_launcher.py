@@ -63,3 +63,4 @@ class TestWatchmanLauncher(TestBase):
     options = ['--watchman-socket-path={}'.format(expected_path)]
     wl = self.watchman_launcher(options)
     self.assertEqual(wl.watchman._sock_file, expected_path)
+
