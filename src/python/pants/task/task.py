@@ -295,6 +295,7 @@ class TaskBase(SubsystemClientMixin, Optionable, AbstractClass):
     return versioned_workdir
 
   def _options_fingerprint(self, scope):
+    # print("BL: Computing fingerprint for options")
     options_hasher = sha1()
     options_hasher.update(scope.encode('utf-8'))
     options_fp = OptionsFingerprinter.combined_options_fingerprint_for_scope(

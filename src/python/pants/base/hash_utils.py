@@ -13,7 +13,7 @@ from twitter.common.collections import OrderedSet
 
 from pants.base.deprecated import deprecated
 from pants.util.collections_abc_backport import Iterable, Mapping, OrderedDict, Set
-from pants.util.objects import DatatypeMixin
+from pants.util.objects import DatatypeMixin, ChoicesMixin
 from pants.util.strutil import ensure_binary
 
 
@@ -96,7 +96,13 @@ class CoercingEncoder(json.JSONEncoder):
       # __dict__ (see https://docs.python.org/2/library/abc.html), so we need to check for it
       # specially here.
       # TODO: determine if the __repr__ should be some abstractmethod on DatatypeMixin!
+      print("BL: Running datatype mixing.default")
+      # return self.default(o.__hash__())
       return self.default(repr(o))
+
+    elif isinstance(o, ChoicesMixin):
+      print("BL: hashing ChoiceMixin {}".format(o))
+      return o.value
     elif isinstance(o, Iterable) and not isinstance(o, (bytes, list, str)):
       return list(self.default(i) for i in o)
     return o

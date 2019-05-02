@@ -22,6 +22,7 @@ class CoercingOptionEncoder(CoercingEncoder):
 
 
 def stable_option_fingerprint(obj):
+  print("BL: THIS IS A STABLE FINGERPRINT")
   return json_hash(obj, encoder=CoercingOptionEncoder)
 
 
@@ -87,6 +88,7 @@ class OptionsFingerprinter(object):
     elif option_type == dict_with_files_option:
       return self._fingerprint_dict_with_files(option_val)
     else:
+      # print("BL: Fingerprinting primtive type = {}, val = {}".format(option_type, option_val))
       return self._fingerprint_primitives(option_val)
 
   def _fingerprint_target_specs(self, specs):
