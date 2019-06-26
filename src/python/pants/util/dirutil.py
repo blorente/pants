@@ -298,7 +298,7 @@ def register_rmtree(directory, cleaner=_mkdtemp_atexit_cleaner):
 
 
 def append_os_sep(directory):
-  return os.path.join(directory, directory + os.sep)
+  return directory + os.sep
 
 
 def safe_rmtree(directory, recursive=False):
@@ -342,13 +342,16 @@ def safe_concurrent_rename(src, dst, recursive=False):
   """Rename src to dst, ignoring errors due to dst already existing.
 
   Useful when concurrent processes may attempt to create dst, and it doesn't matter who wins.
+
+  If recursive is set and src is a symlink to a directory, it will dereference it and rename the
+  underlying directory. When recursive is set to False, it will only rename the symlink.
   """
   # Delete dst, in case it existed (with old content) even before any concurrent processes
   # attempted this write. This ensures that at least one process writes the new content.
   if os.path.isdir(src):  # Note that dst may not exist, so we test for the type of src.
     safe_rmtree(dst)
   else:
-    safe_rmtree(dst, recursive=True) if os.path.islink(src) and recursive else safe_delete(dst)
+    safe_delete(dst) if not os.path.islink(src) or not recursive else safe_rmtree(dst, recursive=True)
   try:
     src = append_os_sep(src) if recursive else src
     shutil.move(src, dst)
