@@ -5,21 +5,7 @@ import socket
 import unittest
 import unittest.mock
 
-from pants.java.nailgun_protocol import ChunkType, MaybeShutdownSocket, NailgunProtocol
-
-
-class TestChunkType(unittest.TestCase):
-  def test_chunktype_constants(self):
-    self.assertIsNotNone(ChunkType.ARGUMENT)
-    self.assertIsNotNone(ChunkType.ENVIRONMENT)
-    self.assertIsNotNone(ChunkType.WORKING_DIR)
-    self.assertIsNotNone(ChunkType.COMMAND)
-    self.assertIsNotNone(ChunkType.STDIN)
-    self.assertIsNotNone(ChunkType.STDOUT)
-    self.assertIsNotNone(ChunkType.STDERR)
-    self.assertIsNotNone(ChunkType.START_READING_INPUT)
-    self.assertIsNotNone(ChunkType.STDIN_EOF)
-    self.assertIsNotNone(ChunkType.EXIT)
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol
 
 
 class TestNailgunProtocol(unittest.TestCase):

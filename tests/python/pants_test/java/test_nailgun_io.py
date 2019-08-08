@@ -8,7 +8,7 @@ import unittest
 import unittest.mock
 
 from pants.java.nailgun_io import NailgunStreamWriter, Pipe, PipedNailgunStreamWriter
-from pants.java.nailgun_protocol import ChunkType, NailgunProtocol
+from pants.java.nailgun_protocol import NailgunProtocol
 
 
 PATCH_OPTS = dict(autospec=True, spec_set=True)
@@ -21,8 +21,8 @@ class TestNailgunStreamWriter(unittest.TestCase):
     self.writer = NailgunStreamWriter(
       (self.in_fd,),
       self.mock_socket,
-      (ChunkType.STDIN,),
-      ChunkType.STDIN_EOF
+      (NailgunProtocol.ChunkType.STDIN,),
+      NailgunProtocol.ChunkType.STDIN_EOF
     )
 
   def test_stop(self):
@@ -69,8 +69,8 @@ class TestNailgunStreamWriter(unittest.TestCase):
     self.assertEqual(mock_read.call_count, 2)
 
     mock_writer.assert_has_calls([
-      unittest.mock.call(unittest.mock.ANY, ChunkType.STDIN, b'A' * 300),
-      unittest.mock.call(unittest.mock.ANY, ChunkType.STDIN_EOF)
+      unittest.mock.call(unittest.mock.ANY, NailgunProtocol.ChunkType.STDIN, b'A' * 300),
+      unittest.mock.call(unittest.mock.ANY, NailgunProtocol.ChunkType.STDIN_EOF)
     ])
 
 
@@ -90,7 +90,7 @@ class TestPipedNailgunStreamWriter(unittest.TestCase):
     writer = PipedNailgunStreamWriter(
       pipes=[pipe],
       socket=self.mock_socket,
-      chunk_type=(ChunkType.STDOUT,),
+      chunk_type=(NailgunProtocol.ChunkType.STDOUT,),
       chunk_eof_type=None,
       buf_size=len(b"A")
     )
@@ -100,4 +100,4 @@ class TestPipedNailgunStreamWriter(unittest.TestCase):
       writer.join(1)
       self.assertFalse(writer.is_alive())
 
-    mock_writer.assert_has_calls([unittest.mock.call(unittest.mock.ANY, ChunkType.STDOUT, b'A')] * (len(test_data) - 1))
+    mock_writer.assert_has_calls([unittest.mock.call(unittest.mock.ANY, NailgunProtocol.ChunkType.STDOUT, b'A')] * (len(test_data) - 1))

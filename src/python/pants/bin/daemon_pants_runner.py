@@ -15,7 +15,7 @@ from pants.init.logging import encapsulated_global_logger
 from pants.init.util import clean_global_runtime_state
 from pants.java.nailgun_io import (NailgunStreamStdinReader, NailgunStreamWriterError,
                                    PipedNailgunStreamWriter)
-from pants.java.nailgun_protocol import ChunkType, MaybeShutdownSocket, NailgunProtocol
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol
 from pants.util.contextutil import hermetic_environment_as, stdio_as
 from pants.util.socket import teardown_socket
 
@@ -160,8 +160,8 @@ class DaemonPantsRunner(ExceptionSink.AccessGlobalExiterMixin):
   def _pipe_stdio(cls, maybe_shutdown_socket, stdin_isatty, stdout_isatty, stderr_isatty, handle_stdin):
     """Handles stdio redirection in the case of pipes and/or mixed pipes and ttys."""
     stdio_writers = (
-      (ChunkType.STDOUT, stdout_isatty),
-      (ChunkType.STDERR, stderr_isatty)
+      (NailgunProtocol.ChunkType.STDOUT, stdout_isatty),
+      (NailgunProtocol.ChunkType.STDERR, stderr_isatty)
     )
     types, ttys = zip(*(stdio_writers))
 

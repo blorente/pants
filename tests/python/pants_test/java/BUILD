@@ -22,6 +22,15 @@ python_tests(
 )
 
 python_tests(
+  name = 'nailgun_chunk_type',
+  sources = ['test_nailgun_chunk_type.py'],
+  coverage = ['pants.java.nailgun_chunk_type'],
+  dependencies = [
+    'src/python/pants/java:nailgun_chunk_types'
+  ]
+)
+
+python_tests(
   name = 'nailgun_executor',
   sources = ['test_nailgun_executor.py'],
   coverage = ['pants.java.nailgun_executor'],

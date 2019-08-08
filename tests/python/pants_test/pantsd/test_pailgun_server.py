@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from queue import Queue
 from socketserver import TCPServer
 
-from pants.java.nailgun_protocol import ChunkType, MaybeShutdownSocket, NailgunProtocol
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol
 from pants.pantsd.pailgun_server import PailgunHandler, PailgunServer
 
 
@@ -199,7 +199,7 @@ class TestPailgunHandler(unittest.TestCase):
     self.handler.handle_error()
     maybe_shutdown_socket = MaybeShutdownSocket(self.client_sock)
     last_chunk_type, last_payload = list(NailgunProtocol.iter_chunks(maybe_shutdown_socket))[-1]
-    self.assertEqual(last_chunk_type, ChunkType.EXIT)
+    self.assertEqual(last_chunk_type, NailgunProtocol.ChunkType.EXIT)
     self.assertEqual(last_payload, '1')
 
   @unittest.mock.patch.object(PailgunHandler, '_run_pants', **PATCH_OPTS)

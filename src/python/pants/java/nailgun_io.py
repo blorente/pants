@@ -9,7 +9,8 @@ from contextlib import contextmanager
 
 from contextlib2 import ExitStack
 
-from pants.java.nailgun_protocol import ChunkType, NailgunProtocol
+from pants.java.nailgun_chunk_types import ChunkTypeMixin
+from pants.java.nailgun_protocol import NailgunProtocol
 
 
 class Pipe:
@@ -108,7 +109,7 @@ class _StoppableDaemonThread(threading.Thread):
       self.join()
 
 
-class NailgunStreamStdinReader(_StoppableDaemonThread):
+class NailgunStreamStdinReader(_StoppableDaemonThread, ChunkTypeMixin):
   """Reads Nailgun 'stdin' chunks on a socket and writes them to an output file-like.
 
   Because a Nailgun server only ever receives STDIN and STDIN_EOF ChunkTypes after initial
@@ -153,10 +154,10 @@ class NailgunStreamStdinReader(_StoppableDaemonThread):
         if self.is_stopped:
           return
 
-        if chunk_type == ChunkType.STDIN:
+        if chunk_type == self.ChunkType.STDIN:
           self._write_handle.write(payload)
           self._write_handle.flush()
-        elif chunk_type == ChunkType.STDIN_EOF:
+        elif chunk_type == self.ChunkType.STDIN_EOF:
           return
         else:
           raise NailgunProtocol.ProtocolError(

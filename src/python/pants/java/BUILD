@@ -27,6 +27,11 @@ python_library(
 )
 
 python_library(
+  name = 'nailgun_chunk_types',
+  sources = ['nailgun_chunk_types.py']
+)
+
+python_library(
   name = 'nailgun_io',
   sources = ['nailgun_io.py'],
   dependencies = [
@@ -41,6 +46,7 @@ python_library(
   dependencies = [
     'src/python/pants/util:objects',
     'src/python/pants/util:osutil',
+    ':nailgun_chunk_types'
   ]
 )
 

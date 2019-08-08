@@ -11,8 +11,9 @@ import time
 
 import psutil
 
+from pants.java.nailgun_chunk_types import PailgunChunkTypeMixin
 from pants.java.nailgun_io import NailgunStreamWriter
-from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol, PailgunChunkTypeMixin
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol
 from pants.util.dirutil import safe_file_dump
 from pants.util.osutil import safe_kill
 from pants.util.socket import RecvBufferedSocket
