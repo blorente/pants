@@ -15,7 +15,7 @@ from pants.init.logging import encapsulated_global_logger
 from pants.init.util import clean_global_runtime_state
 from pants.java.nailgun_io import (NailgunStreamStdinReader, NailgunStreamWriterError,
                                    PipedNailgunStreamWriter)
-from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol, PailgunProtocol
 from pants.util.contextutil import hermetic_environment_as, stdio_as
 from pants.util.socket import teardown_socket
 
@@ -226,8 +226,8 @@ class DaemonPantsRunner(ExceptionSink.AccessGlobalExiterMixin):
     # Broadcast our process group ID (in PID form - i.e. negated) to the remote client so
     # they can send signals (e.g. SIGINT) to all processes in the runners process group.
     with self._maybe_shutdown_socket.lock:
-      NailgunProtocol.send_pid(self._maybe_shutdown_socket.socket, os.getpid())
-      NailgunProtocol.send_pgrp(self._maybe_shutdown_socket.socket, os.getpgrp() * -1)
+      PailgunProtocol.send_pid(self._maybe_shutdown_socket.socket, os.getpid())
+      PailgunProtocol.send_pgrp(self._maybe_shutdown_socket.socket, os.getpgrp() * -1)
 
     # Invoke a Pants run with stdio redirected and a proxied environment.
     with self.nailgunned_stdio(self._maybe_shutdown_socket, self._env) as finalizer, \

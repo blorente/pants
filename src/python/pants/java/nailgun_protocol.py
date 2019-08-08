@@ -10,7 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
-from pants.java.nailgun_chunk_types import PailgunChunkTypeMixin
+from pants.java.nailgun_chunk_types import ChunkTypeMixin, PailgunChunkTypeMixin
 from pants.util.objects import datatype
 from pants.util.osutil import Pid
 
@@ -18,7 +18,7 @@ from pants.util.osutil import Pid
 STDIO_DESCRIPTORS = (0, 1, 2)
 
 
-class NailgunProtocol(PailgunChunkTypeMixin):
+class NailgunProtocol(ChunkTypeMixin):
   """A mixin that provides a base implementation of the Nailgun protocol as described on
      http://martiansoftware.com/nailgun/protocol.html.
 
@@ -286,20 +286,6 @@ class NailgunProtocol(PailgunChunkTypeMixin):
     cls.send_exit(sock, payload=encoded_exit_status)
 
   @classmethod
-  def send_pid(cls, sock, pid):
-    """Send the PID chunk over the specified socket."""
-    assert(isinstance(pid, Pid) and pid > 0)
-    encoded_int = cls.encode_int(pid)
-    cls.write_chunk(sock, cls.ChunkType.PID, encoded_int)
-
-  @classmethod
-  def send_pgrp(cls, sock, pgrp):
-    """Send the PGRP chunk over the specified socket."""
-    assert(isinstance(pgrp, Pid) and pgrp < 0)
-    encoded_int = cls.encode_int(pgrp)
-    cls.write_chunk(sock, cls.ChunkType.PGRP, encoded_int)
-
-  @classmethod
   def encode_int(cls, obj):
     """Verify the object is an int, and ASCII-encode it.
 
@@ -361,6 +347,23 @@ class NailgunProtocol(PailgunChunkTypeMixin):
     :returns: A tuple of boolean values indicating ttyname paths or None for (stdin, stdout, stderr).
     """
     return tuple(env.get(cls.TTY_PATH_ENV.format(fd_id)) for fd_id in STDIO_DESCRIPTORS)
+
+
+class PailgunProtocol(NailgunProtocol, PailgunChunkTypeMixin):
+
+  @classmethod
+  def send_pid(cls, sock, pid):
+    """Send the PID chunk over the specified socket."""
+    assert(isinstance(pid, Pid) and pid > 0)
+    encoded_int = cls.encode_int(pid)
+    cls.write_chunk(sock, cls.ChunkType.PID, encoded_int)
+
+  @classmethod
+  def send_pgrp(cls, sock, pgrp):
+    """Send the PGRP chunk over the specified socket."""
+    assert(isinstance(pgrp, Pid) and pgrp < 0)
+    encoded_int = cls.encode_int(pgrp)
+    cls.write_chunk(sock, cls.ChunkType.PGRP, encoded_int)
 
 
 class MaybeShutdownSocket:

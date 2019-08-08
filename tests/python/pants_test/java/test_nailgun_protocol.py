@@ -5,7 +5,7 @@ import socket
 import unittest
 import unittest.mock
 
-from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol, PailgunProtocol
 
 
 class TestNailgunProtocol(unittest.TestCase):
@@ -157,24 +157,6 @@ class TestNailgunProtocol(unittest.TestCase):
       (NailgunProtocol.ChunkType.EXIT, self.TEST_OUTPUT)
     )
 
-  def test_send_pgrp(self):
-    test_pgrp = -1
-    NailgunProtocol.send_pgrp(self.server_sock, test_pgrp)
-    chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
-    self.assertEqual(
-      (chunk_type, payload),
-      (NailgunProtocol.ChunkType.PGRP, NailgunProtocol.encode_int(test_pgrp))
-    )
-
-  def test_send_pid(self):
-    test_pid = 1
-    NailgunProtocol.send_pid(self.server_sock, test_pid)
-    chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
-    self.assertEqual(
-      (chunk_type, payload),
-      (NailgunProtocol.ChunkType.PID, NailgunProtocol.encode_int(test_pid))
-    )
-
   def test_send_exit_with_code(self):
     return_code = 1
     NailgunProtocol.send_exit_with_code(self.server_sock, return_code)
@@ -262,3 +244,31 @@ class TestNailgunProtocol(unittest.TestCase):
 
   def test_construct_chunk_bytes(self):
     NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, b'yes')
+
+
+class TestPailgunProtocol(unittest.TestCase):
+
+  def setUp(self):
+    self.client_sock, self.server_sock = socket.socketpair()
+
+  def tearDown(self):
+    self.client_sock.close()
+    self.server_sock.close()
+
+  def test_send_pgrp(self):
+    test_pgrp = -1
+    PailgunProtocol.send_pgrp(self.server_sock, test_pgrp)
+    chunk_type, payload = PailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
+    self.assertEqual(
+      (chunk_type, payload),
+      (PailgunProtocol.ChunkType.PGRP, PailgunProtocol.encode_int(test_pgrp))
+    )
+
+  def test_send_pid(self):
+    test_pid = 1
+    PailgunProtocol.send_pid(self.server_sock, test_pid)
+    chunk_type, payload = PailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
+    self.assertEqual(
+      (chunk_type, payload),
+      (PailgunProtocol.ChunkType.PID, PailgunProtocol.encode_int(test_pid))
+    )
