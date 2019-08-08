@@ -8,7 +8,7 @@ import unittest.mock
 
 from pants.java.nailgun_client import NailgunClient, NailgunClientSession
 from pants.java.nailgun_io import NailgunStreamWriter
-from pants.java.nailgun_protocol import ChunkType, NailgunProtocol
+from pants.java.nailgun_protocol import NailgunProtocol
 
 
 PATCH_OPTS = dict(autospec=True, spec_set=True)
@@ -72,14 +72,14 @@ class TestNailgunClientSession(unittest.TestCase):
   @unittest.mock.patch('psutil.Process', **PATCH_OPTS)
   def test_process_session(self, mock_psutil_process):
     mock_psutil_process.cmdline.return_value = ['mock', 'process']
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.PID, b'31337')
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.START_READING_INPUT)
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.STDOUT, self.TEST_PAYLOAD)
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.STDERR, self.TEST_PAYLOAD)
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.STDERR, self.TEST_PAYLOAD)
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.STDOUT, self.TEST_PAYLOAD)
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.STDERR, self.TEST_PAYLOAD)
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.EXIT, b'1729')
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.PID, b'31337')
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.START_READING_INPUT)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.STDOUT, self.TEST_PAYLOAD)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.STDERR, self.TEST_PAYLOAD)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.STDERR, self.TEST_PAYLOAD)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.STDOUT, self.TEST_PAYLOAD)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.STDERR, self.TEST_PAYLOAD)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.EXIT, b'1729')
     self.assertEqual(self.nailgun_client_session._process_session(), 1729)
     self.assertEqual(self.fake_stdout.content, self.TEST_PAYLOAD * 2)
     self.assertEqual(self.fake_stderr.content, self.TEST_PAYLOAD * 3)
@@ -90,8 +90,8 @@ class TestNailgunClientSession(unittest.TestCase):
   @unittest.mock.patch('psutil.Process', **PATCH_OPTS)
   def test_process_session_bad_chunk(self, mock_psutil_process):
     mock_psutil_process.cmdline.return_value = ['mock', 'process']
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.PID, b'31337')
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.START_READING_INPUT)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.PID, b'31337')
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.START_READING_INPUT)
     NailgunProtocol.write_chunk(self.server_sock, self.BAD_CHUNK_TYPE, '')
 
     with self.assertRaises(NailgunClientSession.ProtocolError):

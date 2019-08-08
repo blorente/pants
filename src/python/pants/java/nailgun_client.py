@@ -12,7 +12,7 @@ import time
 import psutil
 
 from pants.java.nailgun_io import NailgunStreamWriter
-from pants.java.nailgun_protocol import ChunkType, MaybeShutdownSocket, NailgunProtocol
+from pants.java.nailgun_protocol import MaybeShutdownSocket, NailgunProtocol, PailgunChunkTypeMixin
 from pants.util.dirutil import safe_file_dump
 from pants.util.osutil import safe_kill
 from pants.util.socket import RecvBufferedSocket
@@ -22,7 +22,7 @@ from pants.util.strutil import ensure_binary, safe_shlex_join
 logger = logging.getLogger(__name__)
 
 
-class NailgunClientSession(NailgunProtocol, NailgunProtocol.TimeoutProvider):
+class NailgunClientSession(NailgunProtocol, NailgunProtocol.TimeoutProvider, PailgunChunkTypeMixin):
   """Handles a single nailgun client session."""
 
   def __init__(self, sock, in_file, out_file, err_file, exit_on_broken_pipe=False,
@@ -38,8 +38,8 @@ class NailgunClientSession(NailgunProtocol, NailgunProtocol.TimeoutProvider):
     self._input_writer = None if not in_file else NailgunStreamWriter(
       (in_file.fileno(),),
       self._sock,
-      (ChunkType.STDIN,),
-      ChunkType.STDIN_EOF
+      (self.ChunkType.STDIN,),
+      self.ChunkType.STDIN_EOF
     )
     self._stdout = out_file
     self._stderr = err_file
@@ -118,24 +118,24 @@ class NailgunClientSession(NailgunProtocol, NailgunProtocol.TimeoutProvider):
         # TODO(#6579): assert that we have at this point received all the chunk types in
         # ChunkType.REQUEST_TYPES, then require PID and PGRP (exactly once?), and then allow any of
         # ChunkType.EXECUTION_TYPES.
-        if chunk_type == ChunkType.STDOUT:
+        if chunk_type == self.ChunkType.STDOUT:
           self._write_flush(self._stdout, payload)
-        elif chunk_type == ChunkType.STDERR:
+        elif chunk_type == self.ChunkType.STDERR:
           self._write_flush(self._stderr, payload)
-        elif chunk_type == ChunkType.EXIT:
+        elif chunk_type == self.ChunkType.EXIT:
           self._write_flush(self._stdout)
           self._write_flush(self._stderr)
           return int(payload)
-        elif chunk_type == ChunkType.PID:
+        elif chunk_type == self.ChunkType.PID:
           self.remote_pid = int(payload)
           self.remote_process_cmdline = psutil.Process(self.remote_pid).cmdline()
           if self._remote_pid_callback:
             self._remote_pid_callback(self.remote_pid)
-        elif chunk_type == ChunkType.PGRP:
+        elif chunk_type == self.ChunkType.PGRP:
           self.remote_pgrp = int(payload)
           if self._remote_pgrp_callback:
             self._remote_pgrp_callback(self.remote_pgrp)
-        elif chunk_type == ChunkType.START_READING_INPUT:
+        elif chunk_type == self.ChunkType.START_READING_INPUT:
           self._maybe_start_input_writer()
         else:
           raise self.ProtocolError('received unexpected chunk {} -> {}'.format(chunk_type, payload))

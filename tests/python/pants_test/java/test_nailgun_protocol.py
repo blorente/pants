@@ -79,10 +79,10 @@ class TestNailgunProtocol(unittest.TestCase):
 
   def test_iter_chunks(self):
     expected_chunks = [
-      (ChunkType.COMMAND, self.TEST_COMMAND),
-      (ChunkType.STDOUT, self.TEST_OUTPUT),
-      (ChunkType.STDERR, self.TEST_OUTPUT),
-      (ChunkType.EXIT, self.EMPTY_PAYLOAD)
+      (NailgunProtocol.ChunkType.COMMAND, self.TEST_COMMAND),
+      (NailgunProtocol.ChunkType.STDOUT, self.TEST_OUTPUT),
+      (NailgunProtocol.ChunkType.STDERR, self.TEST_OUTPUT),
+      (NailgunProtocol.ChunkType.EXIT, self.EMPTY_PAYLOAD)
       # N.B. without an EXIT chunk here (or socket failure), this test will deadlock in iter_chunks.
     ]
 
@@ -94,19 +94,19 @@ class TestNailgunProtocol(unittest.TestCase):
 
   def test_read_and_write_chunk(self):
     # Write a command chunk to the server socket.
-    NailgunProtocol.write_chunk(self.server_sock, ChunkType.COMMAND, self.TEST_COMMAND)
+    NailgunProtocol.write_chunk(self.server_sock, NailgunProtocol.ChunkType.COMMAND, self.TEST_COMMAND)
 
     # Read the chunk from the client socket.
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock)
 
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.COMMAND, self.TEST_COMMAND)
+      (NailgunProtocol.ChunkType.COMMAND, self.TEST_COMMAND)
     )
 
   def test_read_chunk_truncated_during_header(self):
     """Construct a chunk and truncate to the first 3 bytes ([:3]), an incomplete header."""
-    truncated_chunk = NailgunProtocol.construct_chunk(ChunkType.STDOUT, self.TEST_OUTPUT)[:3]
+    truncated_chunk = NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, self.TEST_OUTPUT)[:3]
     self.server_sock.sendall(truncated_chunk)
     self.server_sock.close()
 
@@ -115,7 +115,7 @@ class TestNailgunProtocol(unittest.TestCase):
 
   def test_read_chunk_truncated_before_payload(self):
     """Construct a chunk and send exactly the header (first 5 bytes) and truncate the remainder."""
-    truncated_chunk = NailgunProtocol.construct_chunk(ChunkType.STDOUT, self.TEST_OUTPUT)[:5]
+    truncated_chunk = NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, self.TEST_OUTPUT)[:5]
     self.server_sock.sendall(truncated_chunk)
     self.server_sock.close()
 
@@ -124,7 +124,7 @@ class TestNailgunProtocol(unittest.TestCase):
 
   def test_read_chunk_truncated_during_payload(self):
     """Construct a chunk and truncate the last 3 bytes of the payload ([:-3])."""
-    truncated_chunk = NailgunProtocol.construct_chunk(ChunkType.STDOUT, self.TEST_OUTPUT)[:-3]
+    truncated_chunk = NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, self.TEST_OUTPUT)[:-3]
     self.server_sock.sendall(truncated_chunk)
     self.server_sock.close()
 
@@ -136,7 +136,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.START_READING_INPUT, self.EMPTY_PAYLOAD)
+      (NailgunProtocol.ChunkType.START_READING_INPUT, self.EMPTY_PAYLOAD)
     )
 
   def test_send_stdout(self):
@@ -144,7 +144,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.STDOUT, self.TEST_OUTPUT)
+      (NailgunProtocol.ChunkType.STDOUT, self.TEST_OUTPUT)
     )
 
   def test_send_stderr(self):
@@ -152,7 +152,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.STDERR, self.TEST_OUTPUT)
+      (NailgunProtocol.ChunkType.STDERR, self.TEST_OUTPUT)
     )
 
   def test_send_exit_default(self):
@@ -160,7 +160,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.EXIT, self.EMPTY_PAYLOAD)
+      (NailgunProtocol.ChunkType.EXIT, self.EMPTY_PAYLOAD)
     )
 
   def test_send_exit(self):
@@ -168,7 +168,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.EXIT, self.TEST_OUTPUT)
+      (NailgunProtocol.ChunkType.EXIT, self.TEST_OUTPUT)
     )
 
   def test_send_pgrp(self):
@@ -177,7 +177,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.PGRP, NailgunProtocol.encode_int(test_pgrp))
+      (NailgunProtocol.ChunkType.PGRP, NailgunProtocol.encode_int(test_pgrp))
     )
 
   def test_send_pid(self):
@@ -186,7 +186,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.PID, NailgunProtocol.encode_int(test_pid))
+      (NailgunProtocol.ChunkType.PID, NailgunProtocol.encode_int(test_pid))
     )
 
   def test_send_exit_with_code(self):
@@ -195,7 +195,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.EXIT, NailgunProtocol.encode_int(return_code))
+      (NailgunProtocol.ChunkType.EXIT, NailgunProtocol.encode_int(return_code))
     )
 
   def test_send_unicode_chunk(self):
@@ -203,7 +203,7 @@ class TestNailgunProtocol(unittest.TestCase):
     chunk_type, payload = NailgunProtocol.read_chunk(self.client_sock, return_bytes=True)
     self.assertEqual(
       (chunk_type, payload),
-      (ChunkType.STDOUT, self.TEST_UNICODE_PAYLOAD)
+      (NailgunProtocol.ChunkType.STDOUT, self.TEST_UNICODE_PAYLOAD)
     )
 
   def test_isatty_from_empty_env(self):
@@ -269,10 +269,10 @@ class TestNailgunProtocol(unittest.TestCase):
 
   def test_construct_chunk(self):
     with self.assertRaises(TypeError):
-      NailgunProtocol.construct_chunk(ChunkType.STDOUT, 1111)
+      NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, 1111)
 
   def test_construct_chunk_unicode(self):
-    NailgunProtocol.construct_chunk(ChunkType.STDOUT, u'Ø')
+    NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, u'Ø')
 
   def test_construct_chunk_bytes(self):
-    NailgunProtocol.construct_chunk(ChunkType.STDOUT, b'yes')
+    NailgunProtocol.construct_chunk(NailgunProtocol.ChunkType.STDOUT, b'yes')

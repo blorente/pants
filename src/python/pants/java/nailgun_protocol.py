@@ -32,6 +32,24 @@ class ChunkType:
   ENVIRONMENT = b'E'
   WORKING_DIR = b'D'
   COMMAND = b'C'
+  STDIN = b'0'
+  STDOUT = b'1'
+  STDERR = b'2'
+  START_READING_INPUT = b'S'
+  STDIN_EOF = b'.'
+  EXIT = b'X'
+
+  @classmethod
+  def REQUEST_TYPES(cls): return (cls.ARGUMENT, cls.ENVIRONMENT, cls.WORKING_DIR, cls.COMMAND)
+
+  @classmethod
+  def EXECUTION_TYPES(cls): return (cls.STDIN, cls.STDOUT, cls.STDERR, cls.START_READING_INPUT, cls.STDIN_EOF, cls.EXIT)
+
+  @classmethod
+  def VALID_TYPES(cls): return cls.REQUEST_TYPES() + cls.EXECUTION_TYPES()
+
+
+class PailgunChunkType(ChunkType):
   # PGRP and PID are custom extensions to the Nailgun protocol spec for transmitting pid info.
   # PGRP is used to allow the client process to try killing the nailgun server and everything in its
   # process group when the thin client receives a signal. PID is used to retrieve logs for fatal
@@ -41,18 +59,22 @@ class ChunkType:
   # (e.g. by calling it PailgunClient).
   PGRP = b'G'
   PID = b'P'
-  STDIN = b'0'
-  STDOUT = b'1'
-  STDERR = b'2'
-  START_READING_INPUT = b'S'
-  STDIN_EOF = b'.'
-  EXIT = b'X'
-  REQUEST_TYPES = (ARGUMENT, ENVIRONMENT, WORKING_DIR, COMMAND)
-  EXECUTION_TYPES = (PGRP, PID, STDIN, STDOUT, STDERR, START_READING_INPUT, STDIN_EOF, EXIT)
-  VALID_TYPES = REQUEST_TYPES + EXECUTION_TYPES
+
+  # NB: Override the parent method, to add PGRP and PID chunks.
+  @classmethod
+  def EXECUTION_TYPES(cls): return super().EXECUTION_TYPES() + (cls.PGRP, cls.PID)
 
 
-class NailgunProtocol:
+# Mixins to define which chunk types you'll have access to from cls.ChunkType
+class ChunkTypeMixin:
+  ChunkType = ChunkType
+
+
+class PailgunChunkTypeMixin(ChunkTypeMixin):
+  ChunkType = PailgunChunkType
+
+
+class NailgunProtocol(PailgunChunkTypeMixin):
   """A mixin that provides a base implementation of the Nailgun protocol as described on
      http://martiansoftware.com/nailgun/protocol.html.
 
@@ -75,6 +97,8 @@ class NailgunProtocol:
     Steps 7-9 repeat indefinitely until the server transmits an "exit" chunk.
 
   """
+  # TODO Extract usages of `PailgunChunkType`s into a different class
+  #  and make this inherit just ChunkTypeMixin
 
   ENVIRON_SEP = '='
   TTY_ENV_TMPL = 'NAILGUN_TTY_{}'
@@ -106,15 +130,15 @@ class NailgunProtocol:
   def send_request(cls, sock, working_dir, command, *arguments, **environment):
     """Send the initial Nailgun request over the specified socket."""
     for argument in arguments:
-      cls.write_chunk(sock, ChunkType.ARGUMENT, argument)
+      cls.write_chunk(sock, cls.ChunkType.ARGUMENT, argument)
 
     for item_tuple in environment.items():
       cls.write_chunk(sock,
-                      ChunkType.ENVIRONMENT,
+                      cls.ChunkType.ENVIRONMENT,
                       cls.ENVIRON_SEP.join(cls._decode_unicode_seq(item_tuple)))
 
-    cls.write_chunk(sock, ChunkType.WORKING_DIR, working_dir)
-    cls.write_chunk(sock, ChunkType.COMMAND, command)
+    cls.write_chunk(sock, cls.ChunkType.WORKING_DIR, working_dir)
+    cls.write_chunk(sock, cls.ChunkType.COMMAND, command)
 
   @classmethod
   def parse_request(cls, sock):
@@ -134,14 +158,14 @@ class NailgunProtocol:
     while not all((working_dir, command)):
       chunk_type, payload = cls.read_chunk(sock)
 
-      if chunk_type == ChunkType.ARGUMENT:
+      if chunk_type == cls.ChunkType.ARGUMENT:
         arguments.append(payload)
-      elif chunk_type == ChunkType.ENVIRONMENT:
+      elif chunk_type == cls.ChunkType.ENVIRONMENT:
         key, val = payload.split(cls.ENVIRON_SEP, 1)
         environment[key] = val
-      elif chunk_type == ChunkType.WORKING_DIR:
+      elif chunk_type == cls.ChunkType.WORKING_DIR:
         working_dir = payload
-      elif chunk_type == ChunkType.COMMAND:
+      elif chunk_type == cls.ChunkType.COMMAND:
         command = payload
       else:
         raise cls.ProtocolError('received non-request chunk before header was fully received!')
@@ -206,7 +230,7 @@ class NailgunProtocol:
 
     # In the case we get an otherwise well-formed chunk, check the chunk_type for validity _after_
     # we've drained the payload from the socket to avoid subsequent reads of a stale payload.
-    if chunk_type not in ChunkType.VALID_TYPES:
+    if chunk_type not in cls.ChunkType.VALID_TYPES():
       raise cls.ProtocolError('invalid chunk type: {}'.format(chunk_type))
     if not return_bytes:
       payload = payload.decode()
@@ -288,28 +312,28 @@ class NailgunProtocol:
             # Timeouts are handled by the surrounding loop
             continue
       yield chunk_type, payload
-      if chunk_type == ChunkType.EXIT:
+      if chunk_type == cls.ChunkType.EXIT:
         break
 
   @classmethod
   def send_start_reading_input(cls, sock):
     """Send the Start-Reading-Input chunk over the specified socket."""
-    cls.write_chunk(sock, ChunkType.START_READING_INPUT)
+    cls.write_chunk(sock, cls.ChunkType.START_READING_INPUT)
 
   @classmethod
   def send_stdout(cls, sock, payload):
     """Send the Stdout chunk over the specified socket."""
-    cls.write_chunk(sock, ChunkType.STDOUT, payload)
+    cls.write_chunk(sock, cls.ChunkType.STDOUT, payload)
 
   @classmethod
   def send_stderr(cls, sock, payload):
     """Send the Stderr chunk over the specified socket."""
-    cls.write_chunk(sock, ChunkType.STDERR, payload)
+    cls.write_chunk(sock, cls.ChunkType.STDERR, payload)
 
   @classmethod
   def send_exit(cls, sock, payload=b''):
     """Send the Exit chunk over the specified socket."""
-    cls.write_chunk(sock, ChunkType.EXIT, payload)
+    cls.write_chunk(sock, cls.ChunkType.EXIT, payload)
 
   @classmethod
   def send_exit_with_code(cls, sock, code):
@@ -322,14 +346,14 @@ class NailgunProtocol:
     """Send the PID chunk over the specified socket."""
     assert(isinstance(pid, Pid) and pid > 0)
     encoded_int = cls.encode_int(pid)
-    cls.write_chunk(sock, ChunkType.PID, encoded_int)
+    cls.write_chunk(sock, cls.ChunkType.PID, encoded_int)
 
   @classmethod
   def send_pgrp(cls, sock, pgrp):
     """Send the PGRP chunk over the specified socket."""
     assert(isinstance(pgrp, Pid) and pgrp < 0)
     encoded_int = cls.encode_int(pgrp)
-    cls.write_chunk(sock, ChunkType.PGRP, encoded_int)
+    cls.write_chunk(sock, cls.ChunkType.PGRP, encoded_int)
 
   @classmethod
   def encode_int(cls, obj):
