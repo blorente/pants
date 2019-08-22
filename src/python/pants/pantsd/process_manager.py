@@ -499,7 +499,11 @@ class ProcessManager(ProcessMetadataManager):
       logger.critical(traceback.format_exc())
       os._exit(0)
 
-  def daemon_spawn(self, pre_fork_opts=None, post_fork_parent_opts=None, post_fork_child_opts=None):
+  def daemon_spawn(self,
+    pre_fork_opts=None,
+    post_fork_parent_opts=None,
+    post_fork_child_opts=None,
+    force_purge_metadata=False):
     """Perform a single-fork to run a subprocess and write the child pid file.
 
     Use this if your post_fork_child block invokes a subprocess via subprocess.Popen(). In this
@@ -507,7 +511,7 @@ class ProcessManager(ProcessMetadataManager):
     Using this daemonization method vs daemonize() leaves the responsibility of writing the pid
     to the caller to allow for library-agnostic flexibility in subprocess execution.
     """
-    self.purge_metadata()
+    self.purge_metadata(force_purge_metadata)
     self.pre_fork(**pre_fork_opts or {})
     pid = os.fork()
     if pid == 0:

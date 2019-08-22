@@ -476,7 +476,7 @@ class PantsDaemon(FingerprintedProcessManager):
     self.terminate(include_watchman=False)
     self.watchman_launcher.maybe_launch()
     self._logger.debug('launching pantsd')
-    self.daemon_spawn()
+    self.daemon_spawn(force_purge_metadata=True)
     # Wait up to 60 seconds for pantsd to write its pidfile.
     pantsd_pid = self.await_pid(60)
     listening_port = self.read_named_socket('pailgun', int)
