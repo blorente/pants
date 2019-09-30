@@ -102,10 +102,10 @@ impl NailgunProcessMap {
 
 #[derive(Debug)]
 pub struct NailgunProcessMetadata {
-    name: NailgunProcessName,
-    fingerprint: NailgunProcessFingerprint, 
-    pid: Pid, 
-    port: Port,
+    pub name: NailgunProcessName,
+    pub fingerprint: NailgunProcessFingerprint, 
+    pub pid: Pid, 
+    pub port: Port,
 }
 
 impl NailgunProcessMetadata {
