@@ -106,6 +106,12 @@ impl Serialize for Fingerprint {
   }
 }
 
+impl Default for Fingerprint {
+  fn default() -> Self {
+    EMPTY_FINGERPRINT
+  }
+}
+
 ///
 /// A Digest is a fingerprint, as well as the size in bytes of the plaintext for which that is the
 /// fingerprint.
@@ -125,6 +131,12 @@ impl Serialize for Digest {
     obj.serialize_field("fingerprint", &self.0)?;
     obj.serialize_field("size_bytes", &self.1)?;
     obj.end()
+  }
+}
+
+impl Default for Digest {
+  fn default() -> Self {
+    EMPTY_DIGEST
   }
 }
 

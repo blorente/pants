@@ -1,0 +1,11 @@
+[package]
+name = "nailgun_process_map"
+version = "0.1.0"
+authors = ["Borja Lorente <bescobar@twitter.com>"]
+edition = "2018"
+
+[dependencies]
+bytes = "0.4.5"
+hashing = { path = "../hashing" }
+sysinfo = "0.9.5"
+process_execution = { path = "../process_execution" }
