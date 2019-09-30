@@ -3,7 +3,7 @@ use sysinfo::{SystemExt};
 use std::collections::btree_map::BTreeMap;
 
 use process_execution::{ExecuteProcessRequest, Platform};
-use nailgun_process_map::NailgunProcess;
+use nailgun_process_map::NailgunProcessMap;
 use std::time::Duration;
 use std::collections::btree_set::BTreeSet;
 
@@ -23,6 +23,7 @@ fn main() {
         jdk_home: None,
         target_platform: Platform::Darwin,
     };
-    let process = NailgunProcess::connect(&tool_name, startup_options, &system);
+    let mut map = NailgunProcessMap::new();
+    let process = map.connect(tool_name, startup_options);
     println!("Got process! {:?}", process.expect("TODO"))
 }

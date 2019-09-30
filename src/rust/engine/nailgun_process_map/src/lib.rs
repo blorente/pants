@@ -35,85 +35,81 @@ use sysinfo::{Pid, SystemExt, ProcessExt};
 use hashing::Fingerprint;
 use process_execution::ExecuteProcessRequest;
 use std::path::{PathBuf, Path, Component};
+use std::hash::{Hash, Hasher};
 use std::fs::{metadata, File};
 use std::{fs, io};
 use std::io::Write;
+use std::collections::hash_map::DefaultHasher;
 
 // TODO: This can be just an enum, but using an enum while developing.
 type NailgunProcessName = String;
-type NailgunProcessFingerprint = Fingerprint;
+//type NailgunProcessFingerprint = Fingerprint;
+type NailgunProcessFingerprint = u64;
 type Port = usize;
 
-struct NailgunProcessMap {
+pub struct NailgunProcessMap {
     // TODO: Possibly wrap in a Mutex
     processes: HashMap<NailgunProcessName, NailgunProcessMetadata>,
     system: sysinfo::System,
 }
 
+fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
+    // TODO Use CommandRunner.digest here!
+    let mut hasher = DefaultHasher::new();
+    epr.hash(&mut hasher);
+    hasher.finish()
+}
+
 impl NailgunProcessMap {
-    fn new() -> Self {
+    pub fn new() -> Self {
         NailgunProcessMap {
             processes: HashMap::new(),
             system: sysinfo::System::new(),
         }
     }
 
-    pub fn ensure_nailgun_started(&mut self, name: NailgunProcessName, startup_options: ExecuteProcessRequest) {
-        unimplemented!()
-    }
-}
-
-type NailgunProcessMetadata = (NailgunProcessFingerprint, Pid, Port);
-#[derive(Debug)]
-pub struct NailgunProcess {
-    pid: Pid,
-    port: Port,
-//    fingerprint: NailgunProcessFingerprint,
-    startup_options: ExecuteProcessRequest,
-}
-
-const PROCESS_METADATA_DIR: &str = "/tmp/pids/";
-
-#[derive(Copy, Clone)]
-enum ProcessMetadataFile {
-    Pidfile,
-    Portfile
-}
-
-impl ProcessMetadataFile {
-    fn as_string(self) -> String {
-        match self {
-            ProcessMetadataFile::Pidfile => String::from("pid"),
-            ProcessMetadataFile::Portfile=> String::from("port"),
+    pub fn connect(&mut self, name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<&NailgunProcessMetadata, String> {
+        let maybe_process: Option<&NailgunProcessMetadata> = self.processes.get(&name);
+        if let Some(process) = maybe_process {
+            if self.system.get_process(process.pid).is_some() {
+                println!("I have found process {} for name {}, with fingerprint {:?}", process.name, name, process.fingerprint);
+                // Check if the command line has the same shape as the one of the process with the pid.
+                let requested_fingerprint = hacky_hash(&startup_options);
+                if requested_fingerprint == process.fingerprint {
+                    // If it has, fill in the metadata and return the object.
+                    println!("The fingerprints coincide!");
+                    Ok(self.processes.get(&name).unwrap())
+                } else {
+                    // The running process doesn't coincide with the options we want.
+                    // Restart it.
+                    Err(format!("The options for process {} are different to the startup_options! \n Startup Options: {:?}\n Process Cmd: {:?}",
+                                process.name, startup_options, process.fingerprint
+                    ))
+                }
+            } else {
+                panic!("This happens when the process is not running, but there is metadata stored in the map.")
+            }
+        } else {
+            // We don't have a running nailgun
+            let maybe_process = NailgunProcessMetadata::start_new(name.clone(), startup_options);
+            maybe_process.and_then(move |process| {
+                self.processes.insert(name.clone(), process);
+                Ok(self.processes.get(&name).unwrap())
+            })
         }
     }
 }
 
-impl NailgunProcess {
+#[derive(Debug)]
+pub struct NailgunProcessMetadata {
+    name: NailgunProcessName,
+    fingerprint: NailgunProcessFingerprint, 
+    pid: Pid, 
+    port: Port,
+}
 
-    fn get_process_metadata_path(name: &NailgunProcessName, file: &ProcessMetadataFile) -> PathBuf {
-        let mut metadata_path = PathBuf::from(PROCESS_METADATA_DIR);
-        metadata_path.push(name);
-        metadata_path.push(&file.as_string());
-        metadata_path
-    }
-
-    // TODO: Unify this methid and read_port
-    fn read_pid_from_metadata_dir(name: &NailgunProcessName) -> Result<Pid, io::Error> {
-        let metadata_path = NailgunProcess::get_process_metadata_path(name, &ProcessMetadataFile::Pidfile);
-        println!("Trying to get pid from dir {:?}", metadata_path);
-        fs::read_to_string(metadata_path)
-          .map(|pid_str| pid_str.parse::<Pid>().unwrap())
-    }
-
-    fn read_port_from_metadata_dir(name: &NailgunProcessName) -> Result<Port, io::Error> {
-        let metadata_path = NailgunProcess::get_process_metadata_path(name, &ProcessMetadataFile::Portfile);
-        println!("Trying to get port from dir {:?}", metadata_path);
-        fs::read_to_string(metadata_path)
-          .map(|port_str| port_str.parse::<Port>().unwrap())
-    }
-
-    fn start_new(name: &NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<Self, String> {
+impl NailgunProcessMetadata {
+    fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<NailgunProcessMetadata, String> {
         println!("I need to start a new process!");
         let cmd = startup_options.argv[0].clone();
         let handle = std::process::Command::new(&cmd)
@@ -122,53 +118,13 @@ impl NailgunProcess {
         handle
           .map_err(|e| format!("Failed to create child handle {}", e))
           .and_then(|handle| {
-              let pid = handle.id() as Pid;
-              let pid_path = NailgunProcess::get_process_metadata_path(name, &ProcessMetadataFile::Pidfile);
-              let mut pid_file = File::create(pid_path);
-              let a = pid_file
-                .map_err(|e| format!("Failed to create Pidfile {}", e))
-                .and_then(|mut file| {
-                    file.write_all(&format!("{}", pid).as_bytes())
-                      .map_err(|e| format!("Failed to write pidfile! {}", e))
-                      .and_then(|_| Ok(NailgunProcess {
-                          pid: pid,
-                          port: 1234,
-                          startup_options: startup_options
-                      }))
-                });
-              a
+            Ok(NailgunProcessMetadata {
+                pid: handle.id() as Pid,
+                port: 1234,
+                fingerprint: hacky_hash(&startup_options),
+                name: name,
+            })
           })
-    }
-
-    pub fn connect(name: &NailgunProcessName, startup_options: ExecuteProcessRequest, system: &sysinfo::System) -> Result<Self, String> {
-        // Read .pids directory with the correct name.
-        let maybe_pid = NailgunProcess::read_pid_from_metadata_dir(name);
-        if let Ok(pid) = maybe_pid {
-            if let Some(process) = system.get_process(pid) {
-                println!("I have found process {} for name {}, with cmd {:?}", process.name(), name, process.cmd());
-                // Check if the command line has the same shape as the one of the process with the pid.
-                if startup_options.argv == process.cmd() {
-                    // If it has, fill in the metadata and return the object.
-                    println!("The options coincide!");
-                    Ok(NailgunProcess {
-                        pid: pid,
-                        port: NailgunProcess::read_port_from_metadata_dir(name).expect("asdfasdf"),
-                        startup_options: startup_options,
-                    })
-                } else {
-                    // The running process doesn't coincide with the options we want.
-                    // Restart it.
-                    Err(format!("The options for process {} are different to the startup_options! \n Startup Options: {:?}\n Process Cmd: {:?} \n Process Environ {:?}",
-                                process.name(), startup_options, process.cmd(), process.environ()
-                    ))
-                }
-            } else {
-                panic!("This happens when the process is not running, but there is a metadata file.")
-            }
-        } else {
-            // We couldn't read the Pidfile
-            NailgunProcess::start_new(name, startup_options)
-        }
     }
 
 }
