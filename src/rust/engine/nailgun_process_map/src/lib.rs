@@ -38,9 +38,16 @@ use std::path::{PathBuf, Path, Component};
 use std::hash::{Hash, Hasher};
 use std::fs::{metadata, File};
 use std::{fs, io};
+use std::io::{BufRead, BufReader};
 use std::io::Write;
 use std::collections::hash_map::DefaultHasher;
 use std::process::Stdio;
+use regex::Regex;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref NAILGUN_PORT_REGEX: Regex = Regex::new(r".*\s+port\s+(\d+)\.$").unwrap();
+}
 
 // TODO: This can be just an enum, but using an enum while developing.
 type NailgunProcessName = String;
@@ -74,8 +81,10 @@ impl NailgunProcessMap {
         if let Some(process) = maybe_process {
             println!("Checking if process {} is still alive...", process.pid);
             self.system.refresh_process(process.pid);
-            if self.system.get_process(process.pid).is_some() {
-                println!("I have found process {} for name {}, with fingerprint {:?}", process.name, name, process.fingerprint);
+            // TODO Also check the process status (idle, zombie...) here.
+            if let Some(system_process) = self.system.get_process(process.pid) {
+                println!("I have found process {} for name {}, with fingerprint {:?}, and status {:?}, and uid {:?}, and gid {:?}", 
+                    process.name, name, process.fingerprint, system_process.status, system_process.uid, system_process.gid);
                 // Check if the command line has the same shape as the one of the process with the pid.
                 let requested_fingerprint = hacky_hash(&startup_options);
                 if requested_fingerprint == process.fingerprint {
@@ -113,8 +122,17 @@ pub struct NailgunProcessMetadata {
     pub handle: std::process::Child,
 }
 
-fn read_port(child: &std::process::Child) -> Result<Port, String> {
-    Ok(1236)
+fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
+    let stdout = child.stdout.as_mut().ok_or(format!("No Stdout found!"));
+    stdout.and_then(|stdout| {
+        let reader = io::BufReader::new(stdout);
+        let line = reader.lines().next().expect("TODO").expect("TODO");
+        println!("Read line {}", line);
+        let port = &NAILGUN_PORT_REGEX.captures_iter(&line).next().expect("TODO")[1];
+        println!("Parsed port is {}", &port);
+        port.parse::<Port>()
+            .map_err(|e| format!("Error parsing port {}! {}", &port, e))
+    })
 }
 
 impl NailgunProcessMetadata {
@@ -146,8 +164,8 @@ impl NailgunProcessMetadata {
                                    .spawn();
         handle
           .map_err(|e| format!("Failed to create child handle {}", e))
-          .and_then(|child| {
-              let port = read_port(&child);
+          .and_then(|mut child| {
+              let port = read_port(&mut child);
               port.map(|port| (child, port))
           })
           .and_then(|(child, port)| {
