@@ -142,23 +142,12 @@ impl NailgunProcessMetadata {
        let stdout_file = File::create(&format!("stdout_{}.txt", name)).unwrap();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
        println!("Starting process with cmd: {:?}, args {:?}", cmd, &startup_options.argv[1..]);
-    //    let handle = std::process::Command::new(&cmd)
-    //                                .current_dir("/Users/bescobar/workspace/otherpants")
-    //                                .args(&startup_options.argv[1..])
-    //                                // .stdout(Stdio::null())
-    //                                // .stderr(Stdio::null())
-    //                             //    .stdout(Stdio::piped())
-    //                             //    .stderr(Stdio::piped())
-    //                             //    .stdout(Stdio::from(stdout_file))
-    //                             //    .stderr(Stdio::from(stderr_file))
-    //                                .stdin(Stdio::null())
-    //                                .output();
         let handle = std::process::Command::new(&cmd)
                                    .current_dir("/Users/bescobar/workspace/otherpants")
                                    .args(&startup_options.argv[1..])
-                                   .stdout(Stdio::piped())
+                                //    .stdout(Stdio::piped())
                                 //    .stderr(Stdio::piped())
-                                //    .stdout(Stdio::from(stdout_file))
+                                   .stdout(Stdio::from(stdout_file))
                                    .stderr(Stdio::from(stderr_file))
                                    .stdin(Stdio::null())
                                    .spawn();
@@ -184,8 +173,6 @@ impl NailgunProcessMetadata {
 impl Drop for NailgunProcessMetadata {
     fn drop(&mut self) {
         println!("Exiting process {:?}", self);
-        // let out = self.handle.wait_with_output().unwrap();
-        // println!("Process exited with output {:?}", String::from_utf8(out.stdout));
         self.handle.kill();
     }
 }
