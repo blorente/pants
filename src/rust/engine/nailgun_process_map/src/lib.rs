@@ -40,6 +40,7 @@ use std::fs::{metadata, File};
 use std::{fs, io};
 use std::io::Write;
 use std::collections::hash_map::DefaultHasher;
+use std::process::Stdio;
 
 // TODO: This can be just an enum, but using an enum while developing.
 type NailgunProcessName = String;
@@ -71,6 +72,8 @@ impl NailgunProcessMap {
     pub fn connect(&mut self, name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<&NailgunProcessMetadata, String> {
         let maybe_process: Option<&NailgunProcessMetadata> = self.processes.get(&name);
         if let Some(process) = maybe_process {
+            println!("Checking if process {} is still alive...", process.pid);
+            self.system.refresh_process(process.pid);
             if self.system.get_process(process.pid).is_some() {
                 println!("I have found process {} for name {}, with fingerprint {:?}", process.name, name, process.fingerprint);
                 // Check if the command line has the same shape as the one of the process with the pid.
@@ -91,6 +94,7 @@ impl NailgunProcessMap {
             }
         } else {
             // We don't have a running nailgun
+            println!("Starting new Nailgun");
             let maybe_process = NailgunProcessMetadata::start_new(name.clone(), startup_options);
             maybe_process.and_then(move |process| {
                 self.processes.insert(name.clone(), process);
@@ -106,25 +110,58 @@ pub struct NailgunProcessMetadata {
     pub fingerprint: NailgunProcessFingerprint, 
     pub pid: Pid, 
     pub port: Port,
+    pub handle: std::process::Child,
 }
 
 impl NailgunProcessMetadata {
     fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<NailgunProcessMetadata, String> {
-        println!("I need to start a new process!");
-        let cmd = startup_options.argv[0].clone();
+       println!("I need to start a new process!");
+       let cmd = startup_options.argv[0].clone();
+       let stdout_file = File::create("stdout.txt").unwrap();
+       let stderr_file = File::create("stderr.txt").unwrap();
+       println!("Starting process with cmd: {:?}, args {:?}", cmd, &startup_options.argv[1..]);
+    //    let handle = std::process::Command::new(&cmd)
+    //                                .current_dir("/Users/bescobar/workspace/otherpants")
+    //                                .args(&startup_options.argv[1..])
+    //                                // .stdout(Stdio::null())
+    //                                // .stderr(Stdio::null())
+    //                             //    .stdout(Stdio::piped())
+    //                             //    .stderr(Stdio::piped())
+    //                             //    .stdout(Stdio::from(stdout_file))
+    //                             //    .stderr(Stdio::from(stderr_file))
+    //                                .stdin(Stdio::null())
+    //                                .output();
         let handle = std::process::Command::new(&cmd)
-                                    .args(&startup_options.argv[1..])
-                                    .spawn();
+                                   .current_dir("/Users/bescobar/workspace/otherpants")
+                                   .args(&startup_options.argv[1..])
+                                   // .stdout(Stdio::null())
+                                   // .stderr(Stdio::null())
+                                //    .stdout(Stdio::piped())
+                                //    .stderr(Stdio::piped())
+                                   .stdout(Stdio::from(stdout_file))
+                                //    .stderr(Stdio::from(stderr_file))
+                                   .stdin(Stdio::null())
+                                   .spawn();
         handle
           .map_err(|e| format!("Failed to create child handle {}", e))
-          .and_then(|handle| {
+          .and_then(|child| {
+            println!("Created child process: {:?}", child);
             Ok(NailgunProcessMetadata {
-                pid: handle.id() as Pid,
+                pid: child.id() as Pid,
                 port: 1234,
                 fingerprint: hacky_hash(&startup_options),
                 name: name,
+                handle: child,
             })
           })
     }
+}
 
+impl Drop for NailgunProcessMetadata {
+    fn drop(&mut self) {
+        println!("Exiting process {:?}", self);
+        // let out = self.handle.wait_with_output().unwrap();
+        // println!("Process exited with output {:?}", String::from_utf8(out.stdout));
+        self.handle.kill();
+    }
 }
