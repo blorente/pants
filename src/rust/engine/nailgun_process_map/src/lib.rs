@@ -113,12 +113,16 @@ pub struct NailgunProcessMetadata {
     pub handle: std::process::Child,
 }
 
+fn read_port(child: &std::process::Child) -> Result<Port, String> {
+    Ok(1236)
+}
+
 impl NailgunProcessMetadata {
     fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<NailgunProcessMetadata, String> {
        println!("I need to start a new process!");
        let cmd = startup_options.argv[0].clone();
-       let stdout_file = File::create("stdout.txt").unwrap();
-       let stderr_file = File::create("stderr.txt").unwrap();
+       let stdout_file = File::create(&format!("stdout_{}.txt", name)).unwrap();
+       let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
        println!("Starting process with cmd: {:?}, args {:?}", cmd, &startup_options.argv[1..]);
     //    let handle = std::process::Command::new(&cmd)
     //                                .current_dir("/Users/bescobar/workspace/otherpants")
@@ -134,21 +138,23 @@ impl NailgunProcessMetadata {
         let handle = std::process::Command::new(&cmd)
                                    .current_dir("/Users/bescobar/workspace/otherpants")
                                    .args(&startup_options.argv[1..])
-                                   // .stdout(Stdio::null())
-                                   // .stderr(Stdio::null())
-                                //    .stdout(Stdio::piped())
+                                   .stdout(Stdio::piped())
                                 //    .stderr(Stdio::piped())
-                                   .stdout(Stdio::from(stdout_file))
-                                //    .stderr(Stdio::from(stderr_file))
+                                //    .stdout(Stdio::from(stdout_file))
+                                   .stderr(Stdio::from(stderr_file))
                                    .stdin(Stdio::null())
                                    .spawn();
         handle
           .map_err(|e| format!("Failed to create child handle {}", e))
           .and_then(|child| {
+              let port = read_port(&child);
+              port.map(|port| (child, port))
+          })
+          .and_then(|(child, port)| {
             println!("Created child process: {:?}", child);
             Ok(NailgunProcessMetadata {
                 pid: child.id() as Pid,
-                port: 1234,
+                port: port,
                 fingerprint: hacky_hash(&startup_options),
                 name: name,
                 handle: child,

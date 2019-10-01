@@ -92,7 +92,7 @@ impl CommandRunner {
   }
 }
 
-struct StreamedHermeticCommand {
+pub struct StreamedHermeticCommand {
   inner: Command,
 }
 
