@@ -76,40 +76,70 @@ impl NailgunProcessMap {
         }
     }
 
-    pub fn connect(&mut self, name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<&NailgunProcessMetadata, String> {
-        let maybe_process: Option<&NailgunProcessMetadata> = self.processes.get(&name);
-        if let Some(process) = maybe_process {
-            println!("Checking if process {} is still alive...", process.pid);
-            self.system.refresh_process(process.pid);
-            // TODO Also check the process status (idle, zombie...) here.
-            if let Some(system_process) = self.system.get_process(process.pid) {
-                println!("I have found process {} for name {}, with fingerprint {:?}, and status {:?}, and uid {:?}, and gid {:?}", 
-                    process.name, name, process.fingerprint, system_process.status, system_process.uid, system_process.gid);
-                // Check if the command line has the same shape as the one of the process with the pid.
-                let requested_fingerprint = hacky_hash(&startup_options);
-                if requested_fingerprint == process.fingerprint {
-                    // If it has, fill in the metadata and return the object.
-                    println!("The fingerprints coincide!");
-                    Ok(self.processes.get(&name).unwrap())
-                } else {
-                    // The running process doesn't coincide with the options we want.
-                    // Restart it.
-                    Err(format!("The options for process {} are different to the startup_options! \n Startup Options: {:?}\n Process Cmd: {:?}",
-                                process.name, startup_options, process.fingerprint
-                    ))
-                }
-            } else {
-                panic!("This happens when the process is not running, but there is metadata stored in the map.")
-            }
+    pub fn get(&self, name: &NailgunProcessName) -> Option<&NailgunProcessMetadata> {
+        self.processes.get(name)
+    }
+
+    pub fn connect(&mut self, name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<(), String> {
+        // If the process is in the map, check if it's alive using the handle.
+        let status = self.processes
+            .get_mut(&name)
+            .map(|process| {
+                process.handle.try_wait().map_err(|e| format!("Error getting the process status! {}", e)).clone()
+            });
+        if let Some(status) = status {
+            let (process_name, process_fingerprint, process_pid) = {
+                self.processes
+                .get(&name)
+                .map(|process| {(process.name.clone(), process.fingerprint.clone(), process.pid)})
+                .unwrap()
+            };
+            println!("Checking if process {} is still alive...", process_pid);
+            status
+                .map_err(|e| format!("Error reading process status {}", e))
+                .and_then(|status| {
+                    match status {
+                        None => {
+                            // Process hasn't exited yet
+                            println!("I have found process {}, with fingerprint {:?}", 
+                                &name, process_fingerprint);
+                            // Check if the command line has the same shape as the one of the process with the pid.
+                            let requested_fingerprint = hacky_hash(&startup_options);
+                            if requested_fingerprint == process_fingerprint {
+                                // If it has, fill in the metadata and return the object.
+                                println!("The fingerprints coincide!");
+                                Ok(())
+                            } else {
+                                // The running process doesn't coincide with the options we want.
+                                // Restart it.
+                                println!("The options for process {} are different to the startup_options! \n Startup Options: {:?}\n Process Cmd: {:?}",
+                                            &process_name, startup_options, process_fingerprint
+                                );
+                                // self.processes.remove(&name);
+                                self.start_new_nailgun(name, startup_options) 
+                            }
+                        }, 
+                        _ => {
+                            // Process Exited successfully, we need to restart 
+                            println!("This happens when the process is not running, but there is metadata stored in the map. Restarting process...");
+                            // self.processes.remove(&name);
+                            self.start_new_nailgun(name, startup_options)
+                        }
+                    }
+                })
         } else {
             // We don't have a running nailgun
-            println!("Starting new Nailgun");
-            let maybe_process = NailgunProcessMetadata::start_new(name.clone(), startup_options);
-            maybe_process.and_then(move |process| {
-                self.processes.insert(name.clone(), process);
-                Ok(self.processes.get(&name).unwrap())
-            })
+            self.start_new_nailgun(name, startup_options)
         }
+    }
+
+    fn start_new_nailgun(&mut self, name: String, startup_options: ExecuteProcessRequest) -> Result<(), String> {
+        println!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
+        let maybe_process = NailgunProcessMetadata::start_new(name.clone(), startup_options);
+        maybe_process.and_then(move |process| {
+            self.processes.insert(name.clone(), process);
+            Ok(())
+        })
     }
 }
 
@@ -139,15 +169,13 @@ impl NailgunProcessMetadata {
     fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<NailgunProcessMetadata, String> {
        println!("I need to start a new process!");
        let cmd = startup_options.argv[0].clone();
-       let stdout_file = File::create(&format!("stdout_{}.txt", name)).unwrap();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
        println!("Starting process with cmd: {:?}, args {:?}", cmd, &startup_options.argv[1..]);
         let handle = std::process::Command::new(&cmd)
                                    .current_dir("/Users/bescobar/workspace/otherpants")
                                    .args(&startup_options.argv[1..])
-                                //    .stdout(Stdio::piped())
+                                   .stdout(Stdio::piped())
                                 //    .stderr(Stdio::piped())
-                                   .stdout(Stdio::from(stdout_file))
                                    .stderr(Stdio::from(stderr_file))
                                    .stdin(Stdio::null())
                                    .spawn();

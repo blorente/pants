@@ -35,8 +35,10 @@ fn main() {
     let mut map = NailgunProcessMap::new();
 
     loop {
-            let process = map.connect(tool_name.clone(), startup_options.clone());
-            println!("Got process! {:#?}", process.expect("TODO"));
+            map.connect(tool_name.clone(), startup_options.clone()).map(|_| {
+                let process = map.get(&tool_name);
+                println!("Got process! {:#?}", process.expect("TODO"));
+            });
             pause();
     }
 }
