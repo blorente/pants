@@ -1,7 +1,7 @@
 // Copyright 2017 Pants project contributors (see CONTRIBUTORS.md).
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-#![deny(warnings)]
+//#![deny(warnings)]
 // Enable all clippy lints except for many of the pedantic ones. It's a shame this needs to be copied and pasted across crates, but there doesn't appear to be a way to include inner attributes from a common source.
 #![deny(
   clippy::all,
@@ -46,6 +46,7 @@ pub mod cache;
 pub mod local;
 pub mod remote;
 pub mod speculate;
+pub mod nailgun_process_map;
 
 extern crate uname;
 
