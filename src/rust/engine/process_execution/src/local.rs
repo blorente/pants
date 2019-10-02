@@ -24,7 +24,6 @@ use super::{
 
 use bytes::{Bytes, BytesMut};
 use workunit_store::WorkUnitStore;
-use crate::nailgun_process_map::NailgunProcessMap;
 
 pub struct CommandRunner {
   store: Store,
@@ -32,7 +31,6 @@ pub struct CommandRunner {
   work_dir: PathBuf,
   cleanup_local_dirs: bool,
   platform: Platform,
-  nailgun_process_manager: NailgunProcessMap,
 }
 
 impl CommandRunner {
@@ -48,7 +46,6 @@ impl CommandRunner {
       work_dir,
       cleanup_local_dirs,
       platform: Platform::current_platform().unwrap(),
-      nailgun_process_manager: NailgunProcessMap::new(),
     }
   }
 

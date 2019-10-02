@@ -46,7 +46,7 @@ pub mod cache;
 pub mod local;
 pub mod remote;
 pub mod speculate;
-pub mod nailgun_process_map;
+pub mod nailgun;
 
 extern crate uname;
 
