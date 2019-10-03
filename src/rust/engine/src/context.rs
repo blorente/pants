@@ -141,12 +141,17 @@ impl Core {
 
     let mut command_runner: Box<dyn process_execution::CommandRunner> =
       Box::new(BoundedCommandRunner::new(
-        Box::new(process_execution::local::CommandRunner::new(
-          store.clone(),
-          executor.clone(),
-          std::env::temp_dir(),
-          process_execution_cleanup_local_dirs,
-        )),
+//        Box::new(process_execution::local::CommandRunner::new(
+        Box::new(
+          process_execution::nailgun::NailgunCommandRunner::new(
+            Box::new(process_execution::local::CommandRunner::new(
+              store.clone(),
+              executor.clone(),
+              std::env::temp_dir(),
+              process_execution_cleanup_local_dirs,
+            ))
+          )
+        ),
         process_execution_local_parallelism,
       ));
 

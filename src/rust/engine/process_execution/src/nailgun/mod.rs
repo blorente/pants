@@ -1,25 +1,26 @@
 
 use super::CommandRunner;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
 use crate::{MultiPlatformExecuteProcessRequest, FallibleExecuteProcessResult, ExecuteProcessRequest};
 use workunit_store::WorkUnitStore;
-use futures::Future;
 use boxfuture::{BoxFuture, Boxable};
 use std::path::PathBuf;
+use std::sync::Arc;
+use futures::future::Future;
 
 pub mod nailgun_process_map;
 
 pub type NailgunProcessMap = nailgun_process_map::NailgunProcessMap;
 
-struct NailgunCommandRunner {
-    inner: Arc<dyn CommandRunner>,
+pub struct NailgunCommandRunner {
+    inner: Arc<Box<dyn CommandRunner>>,
     nailguns: NailgunProcessMap,
 }
 
 impl NailgunCommandRunner {
     pub fn new(runner: Box<dyn CommandRunner>) -> Self {
         NailgunCommandRunner {
-            inner: runner.into(),
+            inner: Arc::new(runner),
             nailguns: NailgunProcessMap::new(),
         }
     }
@@ -49,7 +50,8 @@ impl super::CommandRunner for NailgunCommandRunner {
             client_req.env.insert("NAILGUN_PORT".into(), metadata.port.to_string());
 
             println!("Running Client EPR {:#?} on Nailgun", client_req);
-            self.inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store).wait()
+            let res = self.inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store);
+            res.wait()
         });
         futures::done(res).to_boxed()
     }
