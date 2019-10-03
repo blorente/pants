@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::{MultiPlatformExecuteProcessRequest, FallibleExecuteProcessResult, ExecuteProcessRequest};
 use workunit_store::WorkUnitStore;
 use futures::Future;
-use boxfuture::BoxFuture;
+use boxfuture::{BoxFuture, Boxable};
 use std::path::PathBuf;
 
 pub mod nailgun_process_map;
@@ -42,15 +42,16 @@ impl super::CommandRunner for NailgunCommandRunner {
         nailgun_req.argv.retain(|arg| !is_client_arg(arg));
 
         let nailgun_name = nailgun_req.argv.last().unwrap().clone(); // We assume the last one is the main class name
-        self.nailguns.connect(nailgun_name, nailgun_req).and_then(|res| {
+        let res = self.nailguns.connect(nailgun_name.clone(), nailgun_req).and_then(|res| {
             let metadata = self.nailguns.get(&nailgun_name).unwrap();
             client_req.argv.retain(is_client_arg);
-            client_req.jdk_home = Some(PathBuf::from("~/workspace/bescobar/otherpants/mock_jdk".into()));
+            client_req.jdk_home = Some(PathBuf::from("~/workspace/bescobar/otherpants/mock_jdk"));
             client_req.env.insert("NAILGUN_PORT".into(), metadata.port.to_string());
 
             println!("Running Client EPR {:#?} on Nailgun", client_req);
-            self.inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
-        })
+            self.inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store).wait()
+        });
+        futures::done(res).to_boxed()
     }
 
     fn extract_compatible_request(&self, req: &MultiPlatformExecuteProcessRequest) -> Option<ExecuteProcessRequest> {
