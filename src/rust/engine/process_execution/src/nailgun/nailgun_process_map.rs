@@ -20,6 +20,7 @@ use regex::Regex;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 use parking_lot::Mutex;
+use crate::local::StreamedHermeticCommand;
 
 lazy_static! {
     static ref NAILGUN_PORT_REGEX: Regex = Regex::new(r".*\s+port\s+(\d+)\.$").unwrap();
@@ -125,11 +126,11 @@ pub struct NailgunProcessMetadata {
     pub fingerprint: NailgunProcessFingerprint, 
     pub pid: Pid, 
     pub port: Port,
-    pub handle: Arc<Mutex<std::process::Child>>,
+    pub handle: Arc<Mutex<tokio_process::Child>>,
 }
 
-fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
-    let stdout = child.stdout.as_mut().ok_or(format!("No Stdout found!"));
+fn read_port(child: &mut tokio_process::Child) -> Result<Port, String> {
+    let stdout = child.stdout().as_mut().ok_or(format!("No Stdout found!"));
     stdout.and_then(|stdout| {
         let reader = io::BufReader::new(stdout);
         let line = reader.lines().next().expect("TODO").expect("TODO");
@@ -147,13 +148,9 @@ impl NailgunProcessMetadata {
        let cmd = startup_options.argv[0].clone();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
        println!("Starting process with cmd: {:?}, args {:?}", cmd, &startup_options.argv[1..]);
-        let handle = std::process::Command::new(&cmd)
+        let handle = StreamedHermeticCommand::new(&cmd)
                                    .current_dir("/Users/bescobar/workspace/otherpants")
                                    .args(&startup_options.argv[1..])
-                                   .stdout(Stdio::piped())
-                                //    .stderr(Stdio::piped())
-                                   .stderr(Stdio::from(stderr_file))
-                                   .stdin(Stdio::null())
                                    .spawn();
         handle
           .map_err(|e| format!("Failed to create child handle {}", e))

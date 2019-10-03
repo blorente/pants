@@ -16,7 +16,7 @@ use std::sync::Arc;
 use store::{OneOffStoreFileByDigest, Snapshot, Store};
 
 use tokio_codec::{BytesCodec, FramedRead};
-use tokio_process::CommandExt;
+use tokio_process::{CommandExt, Child};
 
 use super::{
   ExecuteProcessRequest, FallibleExecuteProcessResult, MultiPlatformExecuteProcessRequest, Platform,
@@ -110,7 +110,7 @@ enum ChildOutput {
 /// A streaming command that accepts no input stream and does not consult the `PATH`.
 ///
 impl StreamedHermeticCommand {
-  fn new<S: AsRef<OsStr>>(program: S) -> StreamedHermeticCommand {
+  pub(crate) fn new<S: AsRef<OsStr>>(program: S) -> StreamedHermeticCommand {
     let mut inner = Command::new(program);
     inner
       .env_clear()
@@ -120,7 +120,7 @@ impl StreamedHermeticCommand {
     StreamedHermeticCommand { inner }
   }
 
-  fn args<I, S>(&mut self, args: I) -> &mut StreamedHermeticCommand
+  pub(crate) fn args<I, S>(&mut self, args: I) -> &mut StreamedHermeticCommand
   where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -129,7 +129,7 @@ impl StreamedHermeticCommand {
     self
   }
 
-  fn envs<I, K, V>(&mut self, vars: I) -> &mut StreamedHermeticCommand
+  pub(crate) fn envs<I, K, V>(&mut self, vars: I) -> &mut StreamedHermeticCommand
   where
     I: IntoIterator<Item = (K, V)>,
     K: AsRef<OsStr>,
@@ -139,18 +139,23 @@ impl StreamedHermeticCommand {
     self
   }
 
-  fn current_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut StreamedHermeticCommand {
+  pub(crate) fn current_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut StreamedHermeticCommand {
     self.inner.current_dir(dir);
     self
   }
 
-  fn stream(&mut self) -> Result<impl Stream<Item = ChildOutput, Error = String> + Send, String> {
+  pub(crate) fn spawn(&mut self) -> Result<tokio_process::Child, String> {
     self
-      .inner
-      .stdin(Stdio::null())
-      .stdout(Stdio::piped())
-      .stderr(Stdio::piped())
-      .spawn_async()
+        .inner
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn_async()
+        .map_err(|e| format!("Error launching process: {:?}", e))
+  }
+
+  fn stream(&mut self) -> Result<impl Stream<Item = ChildOutput, Error = String> + Send, String> {
+    self.spawn()
       .map_err(|e| format!("Error launching process: {:?}", e))
       .and_then(|mut child| {
         let stdout_stream = FramedRead::new(child.stdout().take().unwrap(), BytesCodec::new())
