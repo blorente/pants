@@ -12,7 +12,7 @@ use std::path::{PathBuf, Path, Component};
 use std::hash::{Hash, Hasher};
 use std::fs::{metadata, File};
 use std::{fs, io};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Stdout};
 use std::io::Write;
 use std::collections::hash_map::DefaultHasher;
 use std::process::Stdio;
@@ -55,7 +55,7 @@ impl NailgunProcessMap {
         self.processes.lock().get(name).map(|elem| elem.clone())
     }
 
-    pub fn connect(&self, name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<(), String> {
+    pub fn connect(&self, name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<(), String> {
         // If the process is in the map, check if it's alive using the handle.
         let status = {
             self.processes.lock()
@@ -93,26 +93,26 @@ impl NailgunProcessMap {
                                          &process_name, startup_options, process_fingerprint
                                 );
                                 // self.processes.remove(&name);
-                                self.start_new_nailgun(name, startup_options)
+                                self.start_new_nailgun(name, startup_options, workdir_path)
                             }
                         },
                         _ => {
                             // Process Exited successfully, we need to restart
                             println!("This happens when the process is not running, but there is metadata stored in the map. Restarting process...");
                             // self.processes.remove(&name);
-                            self.start_new_nailgun(name, startup_options)
+                            self.start_new_nailgun(name, startup_options, workdir_path)
                         }
                     }
                 })
         } else {
             // We don't have a running nailgun
-            self.start_new_nailgun(name, startup_options)
+            self.start_new_nailgun(name, startup_options, workdir_path)
         }
     }
 
-    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest) -> Result<(), String> {
+    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<(), String> {
         println!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
-        NailgunProcessMetadata::start_new(name.clone(), startup_options)
+        NailgunProcessMetadata::start_new(name.clone(), startup_options, workdir_path)
             .and_then(move |process| {
                 self.processes.lock().insert(name.clone(), process);
                 Ok(())
@@ -126,16 +126,16 @@ pub struct NailgunProcessMetadata {
     pub fingerprint: NailgunProcessFingerprint, 
     pub pid: Pid, 
     pub port: Port,
-    pub handle: Arc<Mutex<tokio_process::Child>>,
+    pub handle: Arc<Mutex<std::process::Child>>,
 }
 
-fn read_port(child: &mut tokio_process::Child) -> Result<Port, String> {
-    let stdout = child.stdout().as_mut().ok_or(format!("No Stdout found!"));
+fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
+    let stdout = child.stdout.as_mut().ok_or(format!("No Stdout found!"));
     stdout.and_then(|stdout| {
         let reader = io::BufReader::new(stdout);
-        let line = reader.lines().next().expect("TODO").expect("TODO");
+        let line = reader.lines().next().expect("There is no line ready in the child's output").expect("Failed to read element");
         println!("Read line {}", line);
-        let port = &NAILGUN_PORT_REGEX.captures_iter(&line).next().expect("TODO")[1];
+        let port = &NAILGUN_PORT_REGEX.captures_iter(&line).next().expect("I didn't match the output!")[1];
         println!("Parsed port is {}", &port);
         port.parse::<Port>()
             .map_err(|e| format!("Error parsing port {}! {}", &port, e))
@@ -143,23 +143,25 @@ fn read_port(child: &mut tokio_process::Child) -> Result<Port, String> {
 }
 
 impl NailgunProcessMetadata {
-    fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest) -> Result<NailgunProcessMetadata, String> {
+    fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<NailgunProcessMetadata, String> {
        println!("I need to start a new process!");
        let cmd = startup_options.argv[0].clone();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
-       println!("Starting process with cmd: {:?}, args {:?}", cmd, &startup_options.argv[1..]);
-        let handle = StreamedHermeticCommand::new(&cmd)
-                                   .current_dir("/Users/bescobar/workspace/otherpants")
-                                   .args(&startup_options.argv[1..])
-                                   .spawn();
+       println!("Starting process with cmd: {:?}, args {:?}, in cwd {:?}", cmd, &startup_options.argv[1..], &workdir_path);
+        let handle =    std::process::Command::new(&cmd)
+                .args(&startup_options.argv[1..])
+                .stdout(Stdio::piped())
+                .stderr(stderr_file)
+                .current_dir(&workdir_path)
+                .spawn();
         handle
-          .map_err(|e| format!("Failed to create child handle {}", e))
+          .map_err(|e| format!("Failed to create child handle with cmd: {} options {:#?}: {}", &cmd, &startup_options, e))
           .and_then(|mut child| {
               let port = read_port(&mut child);
               port.map(|port| (child, port))
           })
           .and_then(|(child, port)| {
-            println!("Created child process: {:?}", child);
+            println!("Created nailgun server process with pid {}: {:?}", child.id(), child);
             Ok(NailgunProcessMetadata {
                 pid: child.id() as Pid,
                 port: port,

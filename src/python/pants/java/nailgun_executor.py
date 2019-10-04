@@ -145,6 +145,7 @@ class NailgunExecutor(Executor, FingerprintedProcessManager):
         try:
           nailgun = self._get_nailgun_client(jvm_options, classpath, stdout, stderr, stdin)
           logger.debug('Executing via {ng_desc}: {cmd}'.format(ng_desc=nailgun, cmd=this.cmd))
+          logger.debug(f'BL: Main: {main}, cwd: {cwd}, args: {args}')
           return nailgun.execute(main, cwd, *args)
         except (NailgunClient.NailgunError, self.InitialNailgunConnectTimedOut) as e:
           self.terminate()
