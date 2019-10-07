@@ -21,6 +21,7 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use parking_lot::Mutex;
 use crate::local::StreamedHermeticCommand;
+use log::info;
 
 lazy_static! {
     static ref NAILGUN_PORT_REGEX: Regex = Regex::new(r".*\s+port\s+(\d+)\.$").unwrap();
@@ -33,8 +34,9 @@ type NailgunProcessFingerprint = u64;
 type Pid = usize;
 type Port = usize;
 
+#[derive(Clone)]
 pub struct NailgunProcessMap {
-    processes: Mutex<HashMap<NailgunProcessName, NailgunProcessMetadata>>,
+    processes: Arc<Mutex<HashMap<NailgunProcessName, NailgunProcessMetadata>>>,
 }
 
 fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
@@ -47,12 +49,12 @@ fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
 impl NailgunProcessMap {
     pub fn new() -> Self {
         NailgunProcessMap {
-            processes: Mutex::new(HashMap::new()),
+            processes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn get(&self, name: &NailgunProcessName) -> Option<NailgunProcessMetadata> {
-        self.processes.lock().get(name).map(|elem| elem.clone())
+    pub fn get_port(&self, name: &NailgunProcessName) -> Option<Port> {
+        self.processes.lock().get(name).map(|elem| elem.port)
     }
 
     pub fn connect(&self, name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<(), String> {
@@ -71,25 +73,25 @@ impl NailgunProcessMap {
                             .map(|process| { (process.name.clone(), process.fingerprint.clone(), process.pid) })
                             .unwrap()
             };
-            println!("Checking if process {} is still alive...", process_pid);
+            info!("Checking if process {} is still alive...", process_pid);
             status
                 .map_err(|e| format!("Error reading process status {}", e))
                 .and_then(|status| {
                     match status {
                         None => {
                             // Process hasn't exited yet
-                            println!("I have found process {}, with fingerprint {:?}",
+                            info!("I have found process {}, with fingerprint {:?}",
                                      &name, process_fingerprint);
                             // Check if the command line has the same shape as the one of the process with the pid.
                             let requested_fingerprint = hacky_hash(&startup_options);
                             if requested_fingerprint == process_fingerprint {
                                 // If it has, fill in the metadata and return the object.
-                                println!("The fingerprints coincide!");
+                                info!("The fingerprints coincide!");
                                 Ok(())
                             } else {
                                 // The running process doesn't coincide with the options we want.
                                 // Restart it.
-                                println!("The options for process {} are different to the startup_options! \n Startup Options: {:?}\n Process Cmd: {:?}",
+                                info!("The options for process {} are different to the startup_options! \n Startup Options: {:?}\n Process Cmd: {:?}",
                                          &process_name, startup_options, process_fingerprint
                                 );
                                 // self.processes.remove(&name);
@@ -98,7 +100,7 @@ impl NailgunProcessMap {
                         },
                         _ => {
                             // Process Exited successfully, we need to restart
-                            println!("This happens when the process is not running, but there is metadata stored in the map. Restarting process...");
+                            info!("This happens when the process is not running, but there is metadata stored in the map. Restarting process...");
                             // self.processes.remove(&name);
                             self.start_new_nailgun(name, startup_options, workdir_path)
                         }
@@ -111,7 +113,7 @@ impl NailgunProcessMap {
     }
 
     fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<(), String> {
-        println!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
+        info!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
         NailgunProcessMetadata::start_new(name.clone(), startup_options, workdir_path)
             .and_then(move |process| {
                 self.processes.lock().insert(name.clone(), process);
@@ -120,7 +122,7 @@ impl NailgunProcessMap {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NailgunProcessMetadata {
     pub name: NailgunProcessName,
     pub fingerprint: NailgunProcessFingerprint, 
@@ -134,9 +136,9 @@ fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
     stdout.and_then(|stdout| {
         let reader = io::BufReader::new(stdout);
         let line = reader.lines().next().expect("There is no line ready in the child's output").expect("Failed to read element");
-        println!("Read line {}", line);
+        info!("Read line {}", line);
         let port = &NAILGUN_PORT_REGEX.captures_iter(&line).next().expect("I didn't match the output!")[1];
-        println!("Parsed port is {}", &port);
+        info!("Parsed port is {}", &port);
         port.parse::<Port>()
             .map_err(|e| format!("Error parsing port {}! {}", &port, e))
     })
@@ -144,11 +146,11 @@ fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
 
 impl NailgunProcessMetadata {
     fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<NailgunProcessMetadata, String> {
-       println!("I need to start a new process!");
+       info!("I need to start a new process!");
        let cmd = startup_options.argv[0].clone();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
-       println!("Starting process with cmd: {:?}, args {:?}, in cwd {:?}", cmd, &startup_options.argv[1..], &workdir_path);
-        let handle =    std::process::Command::new(&cmd)
+       info!("Starting process with cmd: {:?}, args {:?}, in cwd {:?}", cmd, &startup_options.argv[1..], &workdir_path);
+        let handle = std::process::Command::new(&cmd)
                 .args(&startup_options.argv[1..])
                 .stdout(Stdio::piped())
                 .stderr(stderr_file)
@@ -161,7 +163,7 @@ impl NailgunProcessMetadata {
               port.map(|port| (child, port))
           })
           .and_then(|(child, port)| {
-            println!("Created nailgun server process with pid {}: {:?}", child.id(), child);
+            info!("Created nailgun server process with pid {}: {:?}", child.id(), child);
             Ok(NailgunProcessMetadata {
                 pid: child.id() as Pid,
                 port: port,
@@ -175,7 +177,33 @@ impl NailgunProcessMetadata {
 
 impl Drop for NailgunProcessMetadata {
     fn drop(&mut self) {
-        println!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        info!("Exiting process {:?}", self);
+        pause();
         self.handle.lock().kill();
     }
 }
+
+
+
+fn pause() {
+    use std::io::prelude::*;
+    let mut stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+
+    // We want the cursor to stay at the end of the line, so we print without a newline and flush manually.
+    write!(stdout, "Press any key to continue...").unwrap();
+    stdout.flush().unwrap();
+
+    // Read a single byte and discard
+    let _ = stdin.read(&mut [0u8]).unwrap();
+}
+
+

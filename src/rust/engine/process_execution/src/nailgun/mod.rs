@@ -11,6 +11,8 @@ use std::os::unix::fs::symlink;
 use std::collections::btree_map::BTreeMap;
 use std::collections::btree_set::BTreeSet;
 use std::time::Duration;
+use log::info;
+use hashing::Digest;
 
 pub mod nailgun_process_map;
 
@@ -34,7 +36,33 @@ fn is_client_arg(arg: &String) -> bool {
     arg.starts_with("@")
 }
 
-fn get_nailgun_request(classpath: String) -> ExecuteProcessRequest {
+fn split_args(args: &Vec<String>) -> (Vec<String>, Vec<String>) {
+    let mut iterator = args.iter();
+    let mut nailgun_args = vec![];
+    let mut client_args = vec![];
+    let mut have_seen_classpath = false;
+    let mut have_processed_classpath = false;
+    let mut have_seen_main_class = false;
+    for arg in args {
+        if have_seen_main_class {
+            client_args.push(arg.clone());
+        } else if (arg == "-cp" || arg =="-classpath") && !have_seen_classpath {
+            have_seen_classpath = true;
+            nailgun_args.push(arg.clone());
+        } else if have_seen_classpath && !have_processed_classpath {
+            nailgun_args.push(arg.clone());
+            have_processed_classpath = true;
+        } else if have_processed_classpath && !arg.starts_with("-") {
+            client_args.push(arg.clone());
+            have_seen_main_class = true;
+        } else {
+            nailgun_args.push(arg.clone());
+        }
+    }
+    (nailgun_args, client_args)
+}
+
+fn get_nailgun_request(classpath: String, input_files: Digest) -> ExecuteProcessRequest {
     ExecuteProcessRequest {
         argv: vec![
             String::from("/Library/Java/JavaVirtualMachines/TwitterJDK/Contents/Home/bin/java"),
@@ -48,7 +76,7 @@ fn get_nailgun_request(classpath: String) -> ExecuteProcessRequest {
             String::from(":0")
         ],
         env: BTreeMap::new(),
-        input_files: Default::default(),
+        input_files: input_files,
         output_files: BTreeSet::new(),
         output_directories: BTreeSet::new(),
         timeout: Duration::new(1000, 0),
@@ -77,18 +105,22 @@ impl super::CommandRunner for NailgunCommandRunner {
 
         let workdir_path = PathBuf::from("/tmp/a");
         let workdir_path2 = workdir_path.clone();
+        let workdir_path3= workdir_path.clone();
 
         // HACK Transform the nailgun req into nailgun startup args by heuristically transforming the request
         let mut client_req = self.extract_compatible_request(&req).unwrap();
-        let nailgun_args: Vec<String> = client_req.argv.clone().into_iter().filter(|elem| !is_client_arg(elem)).collect();
+        info!("BL: Full EPR: {:#?}", &client_req);
+        let (nailgun_args, client_args) = split_args(&client_req.argv);
+//            client_req.argv.clone().into_iter().filter(|elem| !is_client_arg(elem)).collect();
         let nailgun_name = nailgun_args.last().unwrap().clone(); // We assume the last one is the main class name
         let custom_classpath = extract_classpath(&nailgun_args);
-        let nailgun_req = get_nailgun_request(custom_classpath);
+        let nailgun_req = get_nailgun_request(custom_classpath, client_req.input_files);
 
-        let custom_main_class = extract_main_class(&nailgun_args);
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
         let nailgun_name = nailgun_req.argv.last().unwrap().clone(); // We assume the last one is the main class name
+        let nailgun_name2 = nailgun_name.clone();
+
         let materialize = self.inner
             .store
             .materialize_directory(workdir_path.clone(), nailgun_req.input_files, workunit_store.clone())
@@ -99,41 +131,47 @@ impl super::CommandRunner for NailgunCommandRunner {
                 })?;
                 Ok(())
             })
-            .wait();
+            .inspect(move |_| info!("Materialized directory! {:?}", &workdir_path3));
 
-        println!("Materialized directory! {:?}", &workdir_path);
 
+
+        let nailguns = self.nailguns.clone();
         let nailgun = materialize
-            .and_then(|_metadata| {
-                self.nailguns
-                    .connect(nailgun_name.clone(), nailgun_req, &workdir_path)
-            });
+            .map(move |_metadata| {
+                nailguns.connect(nailgun_name.clone(), nailgun_req, &workdir_path)
+            })
+            .inspect(|_| info!("Connected to nailgun!"));
 
-        println!("Connected to nailgun!");
+//        pause();
 
-        pause();
-
+        let inner = self.inner.clone();
+        let nailguns = self.nailguns.clone();
         let res = nailgun
-            .and_then(|res| {
-                let metadata = self.nailguns.get(&nailgun_name).unwrap();
-                let client_args: Vec<String> = client_req.argv.clone().into_iter().filter(is_client_arg).collect();
+            .and_then(move |res| {
+                match res {
+                    Ok(_) => {
+                        let port = nailguns.get_port(&nailgun_name2).unwrap();
 
-                client_req.argv = vec![
-                    ".jdk/bin/java".to_string(),
-                    custom_main_class,
-                ];
-                client_req.argv.extend(client_args);
-                client_req.jdk_home = Some(PathBuf::from("/Users/bescobar/workspace/otherpants/mock_jdk"));
-                client_req.env.insert("NAILGUN_PORT".into(), metadata.port.to_string());
+                        info!("Got nailgun at port {:#?}", port);
 
-                println!("Running Client EPR {:#?} on Nailgun", client_req);
-                let res = self.inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store);
-                res.wait()
+                        client_req.argv = vec![
+                            ".jdk/bin/java".to_string(),
+                        ];
+                        client_req.argv.extend(client_args);
+                        client_req.jdk_home = Some(PathBuf::from("/Users/bescobar/workspace/otherpants/mock_jdk"));
+                        client_req.env.insert("NAILGUN_PORT".into(), port.to_string());
+
+                        info!("Running Client EPR {:#?} on Nailgun", client_req);
+//                        pause();
+                        inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
+                    }
+                    Err(e) => {
+                        futures::future::err(e).to_boxed()
+                    }
+                }
             });
 
-        println!("Done executing hte child process! {:#?}", res);
-
-        futures::future::done(res).to_boxed()
+        res.to_boxed()
     }
 
     fn extract_compatible_request(&self, req: &MultiPlatformExecuteProcessRequest) -> Option<ExecuteProcessRequest> {
