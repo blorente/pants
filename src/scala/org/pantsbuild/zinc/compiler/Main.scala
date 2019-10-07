@@ -163,6 +163,7 @@ object Main {
   }
 
   def nailMain(context: NGContext): Unit = {
+    println("BL: I'm the compiler and I'm connecting to nailgun!!!!")
     val startTime = System.currentTimeMillis
 
     Settings.SettingsParser.parse(preprocessArgs(context.getArgs), Settings()) match {
