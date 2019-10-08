@@ -135,8 +135,6 @@ impl super::CommandRunner for NailgunCommandRunner {
             })
             .inspect(|_| info!("Connected to nailgun!"));
 
-//        pause();
-
         let inner = self.inner.clone();
         let nailguns = self.nailguns.clone();
         let res = nailgun
@@ -155,7 +153,6 @@ impl super::CommandRunner for NailgunCommandRunner {
                         client_req.env.insert("NAILGUN_PORT".into(), port.to_string());
 
                         info!("Running Client EPR {:#?} on Nailgun", client_req);
-//                        pause();
                         inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
                     }
                     Err(e) => {
@@ -171,18 +168,3 @@ impl super::CommandRunner for NailgunCommandRunner {
         self.inner.extract_compatible_request(req)
     }
 }
-
-
-fn pause() {
-    use std::io::prelude::*;
-    let mut stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
-
-    // We want the cursor to stay at the end of the line, so we print without a newline and flush manually.
-    write!(stdout, "Press any key to continue...").unwrap();
-    stdout.flush().unwrap();
-
-    // Read a single byte and discard
-    let _ = stdin.read(&mut [0u8]).unwrap();
-}
-
