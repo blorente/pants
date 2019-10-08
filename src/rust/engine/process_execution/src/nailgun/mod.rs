@@ -14,20 +14,20 @@ use std::time::Duration;
 use log::info;
 use hashing::Digest;
 
-pub mod nailgun_process_map;
+pub mod nailgun_pool;
 
-pub type NailgunProcessMap = nailgun_process_map::NailgunProcessMap;
+pub type NailgunPool = nailgun_pool::NailgunPool;
 
 pub struct NailgunCommandRunner {
     inner: Arc<super::local::CommandRunner>,
-    nailguns: NailgunProcessMap,
+    nailguns: NailgunPool,
 }
 
 impl NailgunCommandRunner {
     pub fn new(runner: super::local::CommandRunner) -> Self {
         NailgunCommandRunner {
             inner: Arc::new(runner),
-            nailguns: NailgunProcessMap::new(),
+            nailguns: NailgunPool::new(),
         }
     }
 }
@@ -111,7 +111,7 @@ impl super::CommandRunner for NailgunCommandRunner {
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
         let main_class = client_args.iter().next().unwrap().clone(); // We assume the last one is the main class name
-        let nailgun_name = format!("{}_{}", main_class, nailgun_process_map::hacky_hash(&nailgun_req));
+        let nailgun_name = format!("{}_{}", main_class, nailgun_pool::hacky_hash(&nailgun_req));
         let nailgun_name2 = nailgun_name.clone();
 
         let materialize = self.inner

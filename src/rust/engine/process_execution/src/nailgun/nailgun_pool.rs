@@ -35,7 +35,7 @@ type Pid = usize;
 type Port = usize;
 
 #[derive(Clone)]
-pub struct NailgunProcessMap {
+pub struct NailgunPool {
     processes: Arc<Mutex<HashMap<NailgunProcessName, NailgunProcessMetadata>>>,
 }
 
@@ -46,9 +46,9 @@ pub fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
     hasher.finish()
 }
 
-impl NailgunProcessMap {
+impl NailgunPool {
     pub fn new() -> Self {
-        NailgunProcessMap {
+        NailgunPool {
             processes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
