@@ -140,6 +140,18 @@ impl Default for Digest {
   }
 }
 
+impl From<&[u8]> for Digest {
+  fn from(bytes: &[u8]) -> Self {
+    let mut hasher = Sha256::default();
+    hasher.input(bytes);
+
+    Digest(
+      Fingerprint::from_bytes_unsafe(&hasher.fixed_result()),
+      bytes.len(),
+    )
+  }
+}
+
 ///
 /// A Write instance that fingerprints all data that passes through it.
 ///

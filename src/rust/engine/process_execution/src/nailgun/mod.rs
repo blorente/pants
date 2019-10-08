@@ -1,7 +1,7 @@
 
 use super::CommandRunner;
 use parking_lot::Mutex;
-use crate::{MultiPlatformExecuteProcessRequest, FallibleExecuteProcessResult, ExecuteProcessRequest, Platform};
+use crate::{MultiPlatformExecuteProcessRequest, FallibleExecuteProcessResult, ExecuteProcessRequest, Platform, ExecuteProcessRequestMetadata};
 use workunit_store::WorkUnitStore;
 use boxfuture::{try_future, BoxFuture, Boxable};
 use std::path::PathBuf;
@@ -21,13 +21,15 @@ pub type NailgunPool = nailgun_pool::NailgunPool;
 pub struct NailgunCommandRunner {
     inner: Arc<super::local::CommandRunner>,
     nailguns: NailgunPool,
+    metadata: ExecuteProcessRequestMetadata,
 }
 
 impl NailgunCommandRunner {
-    pub fn new(runner: super::local::CommandRunner) -> Self {
+    pub fn new(runner: super::local::CommandRunner, metadata: ExecuteProcessRequestMetadata) -> Self {
         NailgunCommandRunner {
             inner: Arc::new(runner),
             nailguns: NailgunPool::new(),
+            metadata: metadata,
         }
     }
 }
@@ -111,7 +113,8 @@ impl super::CommandRunner for NailgunCommandRunner {
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
         let main_class = client_args.iter().next().unwrap().clone(); // We assume the last one is the main class name
-        let nailgun_name = format!("{}_{}", main_class, nailgun_pool::hacky_hash(&nailgun_req));
+        let nailgun_req_digest = crate::digest(MultiPlatformExecuteProcessRequest::from(nailgun_req.clone()), &self.metadata);
+        let nailgun_name = format!("{}_{}", main_class, nailgun_req_digest.0);
         let nailgun_name2 = nailgun_name.clone();
 
         let materialize = self.inner
@@ -129,9 +132,10 @@ impl super::CommandRunner for NailgunCommandRunner {
 
 
         let nailguns = self.nailguns.clone();
+        let metadata = self.metadata.clone();
         let nailgun = materialize
             .map(move |_metadata| {
-                nailguns.connect(nailgun_name.clone(), nailgun_req, &workdir_path)
+                nailguns.connect(nailgun_name.clone(), nailgun_req, &workdir_path, nailgun_req_digest)
             })
             .inspect(|_| info!("Connected to nailgun!"));
 

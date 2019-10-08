@@ -6,8 +6,8 @@
 use bytes::Bytes;
 use std::collections::HashMap;
 
-use hashing::Fingerprint;
-use crate::ExecuteProcessRequest;
+use hashing::{Fingerprint, Digest};
+use crate::{ExecuteProcessRequest, ExecuteProcessRequestMetadata, MultiPlatformExecuteProcessRequest};
 use std::path::{PathBuf, Path, Component};
 use std::hash::{Hash, Hasher};
 use std::fs::{metadata, File};
@@ -29,21 +29,13 @@ lazy_static! {
 
 // TODO: This can be just an enum, but using an enum while developing.
 type NailgunProcessName = String;
-//type NailgunProcessFingerprint = Fingerprint;
-type NailgunProcessFingerprint = u64;
+type NailgunProcessFingerprint = Digest;
 type Pid = usize;
 type Port = usize;
 
 #[derive(Clone)]
 pub struct NailgunPool {
     processes: Arc<Mutex<HashMap<NailgunProcessName, NailgunProcessMetadata>>>,
-}
-
-pub fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
-    // TODO Use CommandRunner.digest here!
-    let mut hasher = DefaultHasher::new();
-    epr.hash(&mut hasher);
-    hasher.finish()
 }
 
 impl NailgunPool {
@@ -57,7 +49,7 @@ impl NailgunPool {
         self.processes.lock().get(name).map(|elem| elem.port)
     }
 
-    pub fn connect(&self, name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<(), String> {
+    pub fn connect(&self, name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<(), String> {
         // If the process is in the map, check if it's alive using the handle.
         let status = {
             self.processes.lock()
@@ -83,8 +75,7 @@ impl NailgunPool {
                             info!("I have found process {}, with fingerprint {:?}",
                                      &name, process_fingerprint);
                             // Check if the command line has the same shape as the one of the process with the pid.
-                            let requested_fingerprint = hacky_hash(&startup_options);
-                            if requested_fingerprint == process_fingerprint {
+                            if nailgun_req_digest == process_fingerprint {
                                 // If it has, fill in the metadata and return the object.
                                 info!("The fingerprints coincide!");
                                 Ok(())
@@ -95,26 +86,26 @@ impl NailgunPool {
                                          &process_name, startup_options, process_fingerprint
                                 );
                                 // self.processes.remove(&name);
-                                self.start_new_nailgun(name, startup_options, workdir_path)
+                                self.start_new_nailgun(name, startup_options, workdir_path, nailgun_req_digest)
                             }
                         },
                         _ => {
                             // Process Exited successfully, we need to restart
                             info!("This happens when the process is not running, but there is metadata stored in the map. Restarting process...");
                             // self.processes.remove(&name);
-                            self.start_new_nailgun(name, startup_options, workdir_path)
+                            self.start_new_nailgun(name, startup_options, workdir_path, nailgun_req_digest)
                         }
                     }
                 })
         } else {
             // We don't have a running nailgun
-            self.start_new_nailgun(name, startup_options, workdir_path)
+            self.start_new_nailgun(name, startup_options, workdir_path, nailgun_req_digest)
         }
     }
 
-    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<(), String> {
+    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<(), String> {
         info!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
-        NailgunProcessMetadata::start_new(name.clone(), startup_options, workdir_path)
+        NailgunProcessMetadata::start_new(name.clone(), startup_options, workdir_path, nailgun_req_digest)
             .and_then(move |process| {
                 self.processes.lock().insert(name.clone(), process);
                 Ok(())
@@ -125,7 +116,7 @@ impl NailgunPool {
 #[derive(Debug)]
 pub struct NailgunProcessMetadata {
     pub name: NailgunProcessName,
-    pub fingerprint: NailgunProcessFingerprint, 
+    pub fingerprint: NailgunProcessFingerprint,
     pub pid: Pid, 
     pub port: Port,
     pub handle: Arc<Mutex<std::process::Child>>,
@@ -145,7 +136,7 @@ fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
 }
 
 impl NailgunProcessMetadata {
-    fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf) -> Result<NailgunProcessMetadata, String> {
+    fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<NailgunProcessMetadata, String> {
        info!("I need to start a new process!");
        let cmd = startup_options.argv[0].clone();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
@@ -167,7 +158,7 @@ impl NailgunProcessMetadata {
             Ok(NailgunProcessMetadata {
                 pid: child.id() as Pid,
                 port: port,
-                fingerprint: hacky_hash(&startup_options),
+                fingerprint: nailgun_req_digest,
                 name: name,
                 handle: Arc::new(Mutex::new(child)),
             })

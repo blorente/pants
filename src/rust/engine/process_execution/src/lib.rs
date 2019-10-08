@@ -41,6 +41,10 @@ use store::UploadSummary;
 use workunit_store::WorkUnitStore;
 
 use async_semaphore::AsyncSemaphore;
+use hashing::{Digest, Fingerprint};
+use sha2::Sha256;
+use digest::{Input, FixedOutput};
+use std::fs::metadata;
 
 pub mod cache;
 pub mod local;
@@ -251,6 +255,26 @@ pub trait CommandRunner: Send + Sync {
     &self,
     req: &MultiPlatformExecuteProcessRequest,
   ) -> Option<ExecuteProcessRequest>;
+}
+
+// TODO possibly move to the MEPR struct, or to the hashing crate?
+pub fn digest(req: MultiPlatformExecuteProcessRequest, metadata: &ExecuteProcessRequestMetadata) -> Digest {
+  let mut hashes: Vec<String> = req
+      .0
+      .values()
+      .map(|ref epr| crate::remote::make_execute_request(epr, metadata.clone()).unwrap())
+      .map(|(_a, _b, er)| er.get_action_digest().get_hash().to_string())
+      .collect();
+  hashes.sort();
+  Digest::from(
+    hashes
+        .iter()
+        .fold(String::new(), |mut acc, hash| {
+          acc.push_str(&hash);
+          acc
+        })
+        .as_bytes(),
+  )
 }
 
 ///
