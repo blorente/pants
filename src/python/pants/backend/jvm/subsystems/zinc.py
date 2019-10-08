@@ -27,7 +27,7 @@ from pants.util.fileutil import safe_hardlink_or_copy
 from pants.util.memo import memoized_method, memoized_property
 
 
-_ZINC_COMPILER_VERSION = '0.0.14'
+_ZINC_COMPILER_VERSION = 'hello10'
 
 
 class Zinc:
@@ -77,12 +77,15 @@ class Zinc:
           Shader.exclude_package('xsbti', recursive=True),
           # Unfortunately, is loaded reflectively by the compiler.
           Shader.exclude_package('org.apache.logging.log4j', recursive=True),
+          Shader.exclude_package('org.pantsbuild.zinc.bootstrapper', recursive=True),
+          # Shader.exclude_package('org.pantsbuild.zinc.compiler', recursive=True),
+          Shader.exclude_package('com.martiansoftware.nailgun', recursive=True),
         ]
 
       cls.register_jvm_tool(register,
                             Zinc.ZINC_BOOTSTRAPPER_TOOL_NAME,
                             classpath=[
-                              JarDependency('org.pantsbuild', 'zinc-bootstrapper_2.12', '0.0.11'),
+                              JarDependency('org.pantsbuild', 'zinc-bootstrapper_2.12', 'hello11'),
                             ],
                             main=Zinc.ZINC_BOOTSTRAPER_MAIN,
                             custom_rules=shader_rules,

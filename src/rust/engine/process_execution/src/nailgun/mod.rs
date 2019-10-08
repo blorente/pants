@@ -86,16 +86,11 @@ fn get_nailgun_request(classpath: String, input_files: Digest) -> ExecuteProcess
     }
 }
 
-fn extract_main_class(nailgun_args: &Vec<String>) -> String {
-    nailgun_args.last().unwrap().clone()
-}
-
 fn extract_classpath(nailgun_args: &Vec<String>) -> String {
     let mut it = nailgun_args.into_iter();
     while it.next().unwrap() != "-cp" { };
     it.next().unwrap().clone()
 }
-
 
 impl super::CommandRunner for NailgunCommandRunner {
     fn run(
@@ -107,18 +102,16 @@ impl super::CommandRunner for NailgunCommandRunner {
         let workdir_path2 = workdir_path.clone();
         let workdir_path3= workdir_path.clone();
 
-        // HACK Transform the nailgun req into nailgun startup args by heuristically transforming the request
         let mut client_req = self.extract_compatible_request(&req).unwrap();
         info!("BL: Full EPR: {:#?}", &client_req);
         let (nailgun_args, client_args) = split_args(&client_req.argv);
-//            client_req.argv.clone().into_iter().filter(|elem| !is_client_arg(elem)).collect();
-        let nailgun_name = nailgun_args.last().unwrap().clone(); // We assume the last one is the main class name
         let custom_classpath = extract_classpath(&nailgun_args);
         let nailgun_req = get_nailgun_request(custom_classpath, client_req.input_files);
 
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
-        let nailgun_name = nailgun_req.argv.last().unwrap().clone(); // We assume the last one is the main class name
+        let main_class = client_args.iter().next().unwrap().clone(); // We assume the last one is the main class name
+        let nailgun_name = format!("{}_{}", main_class, nailgun_process_map::hacky_hash(&nailgun_req));
         let nailgun_name2 = nailgun_name.clone();
 
         let materialize = self.inner

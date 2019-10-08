@@ -39,7 +39,7 @@ pub struct NailgunProcessMap {
     processes: Arc<Mutex<HashMap<NailgunProcessName, NailgunProcessMetadata>>>,
 }
 
-fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
+pub fn hacky_hash(epr: &ExecuteProcessRequest) -> NailgunProcessFingerprint {
     // TODO Use CommandRunner.digest here!
     let mut hasher = DefaultHasher::new();
     epr.hash(&mut hasher);
