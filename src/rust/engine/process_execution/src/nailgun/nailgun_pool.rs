@@ -44,15 +44,11 @@ impl NailgunPool {
         }
     }
 
-    pub fn get_port(&self, name: &NailgunProcessName) -> Option<Port> {
-        self.processes.lock().get(name).map(|elem| elem.port)
-    }
-
     pub fn connect(&self,
                    name: NailgunProcessName,
                    startup_options: ExecuteProcessRequest,
                    workdir_path: &PathBuf,
-                   nailgun_req_digest: Digest) -> Result<(), String> {
+                   nailgun_req_digest: Digest) -> Result<Port, String> {
         // If the process is in the map, check if it's alive using the handle.
         let status = {
             self.processes.lock()
@@ -62,13 +58,13 @@ impl NailgunPool {
                 })
         };
         if let Some(status) = status {
-            let (process_name, process_fingerprint, process_pid) = {
+            let (process_name, process_fingerprint, process_port) = {
                 self.processes.lock()
                             .get(&name)
-                            .map(|process| { (process.name.clone(), process.fingerprint.clone(), process.pid) })
+                            .map(|process| { (process.name.clone(), process.fingerprint.clone(), process.port) })
                             .unwrap()
             };
-            info!("Checking if process {} is still alive...", process_pid);
+            info!("Checking if process {} is still alive at port {}...", &process_name, process_port);
             status
                 .map_err(|e| format!("Error reading process status {}", e))
                 .and_then(|status| {
@@ -81,7 +77,7 @@ impl NailgunPool {
                             if nailgun_req_digest == process_fingerprint {
                                 // If it has, fill in the metadata and return the object.
                                 info!("The fingerprints coincide!");
-                                Ok(())
+                                Ok(process_port)
                             } else {
                                 // The running process doesn't coincide with the options we want.
                                 // Restart it.
@@ -106,12 +102,13 @@ impl NailgunPool {
         }
     }
 
-    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<(), String> {
+    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<Port, String> {
         info!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
         NailgunProcessMetadata::start_new(name.clone(), startup_options, workdir_path, nailgun_req_digest)
             .and_then(move |process| {
+                let port = process.port;
                 self.processes.lock().insert(name.clone(), process);
-                Ok(())
+                Ok(port)
             })
     }
 }

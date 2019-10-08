@@ -153,9 +153,7 @@ impl super::CommandRunner for NailgunCommandRunner {
         let res = nailgun
             .and_then(move |res| {
                 match res {
-                    Ok(_) => {
-                        let port = nailguns.get_port(&nailgun_name2).unwrap();
-
+                    Ok(port) => {
                         info!("Got nailgun at port {:#?}", port);
 
                         client_req.argv = vec![
