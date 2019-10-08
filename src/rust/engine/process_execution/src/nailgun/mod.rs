@@ -11,7 +11,7 @@ use std::os::unix::fs::symlink;
 use std::collections::btree_map::BTreeMap;
 use std::collections::btree_set::BTreeSet;
 use std::time::Duration;
-use log::info;
+use log::{info, debug};
 use hashing::Digest;
 
 pub mod nailgun_pool;
@@ -38,10 +38,23 @@ fn is_client_arg(arg: &String) -> bool {
     arg.starts_with("@")
 }
 
-fn split_args(args: &Vec<String>) -> (Vec<String>, Vec<String>) {
+/// Represents the result of parsing the args of a nailgunnable ExecuteProcessRequest
+/// TODO We may want to split the classpath by the ":", and store it as a Vec<String>
+///         to allow for deep fingerprinting.
+struct ParsedArgLists {
+    nailgun_args: Vec<String>,
+    client_args: Vec<String>,
+}
+
+static NAILGUN_JAR: &str = "/Users/bescobar/workspace/otherpants/.pants.d/bootstrap/bootstrap-jvm-tools/a0ebe8e0b001/ivy/jars/com.martiansoftware/nailgun-server/jars/nailgun-server-0.9.1.jar";
+static NAILGUN_MAIN_CLASS: &str = "com.martiansoftware.nailgun.NGServer";
+static ARGS_TO_START_NAILGUN: [&str; 1] = [":0"];
+
+fn split_args(args: &Vec<String>) -> ParsedArgLists {
     let mut iterator = args.iter();
     let mut nailgun_args = vec![];
     let mut client_args = vec![];
+    let mut nailgun_classpath = None;
     let mut have_seen_classpath = false;
     let mut have_processed_classpath = false;
     let mut have_seen_main_class = false;
@@ -52,7 +65,9 @@ fn split_args(args: &Vec<String>) -> (Vec<String>, Vec<String>) {
             have_seen_classpath = true;
             nailgun_args.push(arg.clone());
         } else if have_seen_classpath && !have_processed_classpath {
-            nailgun_args.push(arg.clone());
+            let formatted_classpath = format!("{}:{}", NAILGUN_JAR, arg);
+            nailgun_args.push(formatted_classpath.clone());
+            nailgun_classpath = Some(formatted_classpath);
             have_processed_classpath = true;
         } else if have_processed_classpath && !arg.starts_with("-") {
             client_args.push(arg.clone());
@@ -61,37 +76,28 @@ fn split_args(args: &Vec<String>) -> (Vec<String>, Vec<String>) {
             nailgun_args.push(arg.clone());
         }
     }
-    (nailgun_args, client_args)
+    ParsedArgLists {
+        nailgun_args: nailgun_args,
+        client_args: client_args
+    }
 }
 
-fn get_nailgun_request(classpath: String, input_files: Digest) -> ExecuteProcessRequest {
+fn get_nailgun_request(args: Vec<String>, input_files: Digest, jdk: Option<PathBuf>) -> ExecuteProcessRequest {
+    let mut full_args = args;
+    full_args.push(NAILGUN_MAIN_CLASS.to_string());
+    full_args.extend(ARGS_TO_START_NAILGUN.iter().map(|a| a.to_string()));
+
     ExecuteProcessRequest {
-        argv: vec![
-            String::from("/Library/Java/JavaVirtualMachines/TwitterJDK/Contents/Home/bin/java"),
-            String::from("-Xmx1g"),
-            String::from("-Dpants.buildroot=/Users/bescobar/workspace/otherpants"),
-            String::from("-Dpants.nailgun.owner=/Users/bescobar/workspace/otherpants/.pants.d/ng/FindBugs_compile_findbugs"),
-            String::from("-Dpants.nailgun.fingerprint=a89c6538bef5aabf182b06a81f910a66c87d28eb"),
-            String::from("-cp"),
-            format!("/Users/bescobar/workspace/otherpants/.pants.d/bootstrap/bootstrap-jvm-tools/a0ebe8e0b001/ivy/jars/com.martiansoftware/nailgun-server/jars/nailgun-server-0.9.1.jar:{}", classpath),
-            String::from("com.martiansoftware.nailgun.NGServer"),
-            String::from(":0")
-        ],
+        argv: full_args,
         env: BTreeMap::new(),
         input_files: input_files,
         output_files: BTreeSet::new(),
         output_directories: BTreeSet::new(),
         timeout: Duration::new(1000, 0),
-        description: String::from("EPR to start a nailgun"),
-        jdk_home: None,
+        description: String::from("ExecuteProcessRequest to start a nailgun"),
+        jdk_home: jdk,
         target_platform: Platform::Darwin,
     }
-}
-
-fn extract_classpath(nailgun_args: &Vec<String>) -> String {
-    let mut it = nailgun_args.into_iter();
-    while it.next().unwrap() != "-cp" { };
-    it.next().unwrap().clone()
 }
 
 impl super::CommandRunner for NailgunCommandRunner {
@@ -101,14 +107,11 @@ impl super::CommandRunner for NailgunCommandRunner {
         workunit_store: WorkUnitStore) -> BoxFuture<FallibleExecuteProcessResult, String> {
 
         let workdir_path = PathBuf::from("/tmp/a");
-        let workdir_path2 = workdir_path.clone();
-        let workdir_path3= workdir_path.clone();
 
         let mut client_req = self.extract_compatible_request(&req).unwrap();
         info!("BL: Full EPR: {:#?}", &client_req);
-        let (nailgun_args, client_args) = split_args(&client_req.argv);
-        let custom_classpath = extract_classpath(&nailgun_args);
-        let nailgun_req = get_nailgun_request(custom_classpath, client_req.input_files);
+        let ParsedArgLists {nailgun_args, client_args } = split_args(&client_req.argv);
+        let nailgun_req = get_nailgun_request(nailgun_args, client_req.input_files, client_req.jdk_home.clone());
 
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
@@ -117,19 +120,25 @@ impl super::CommandRunner for NailgunCommandRunner {
         let nailgun_name = format!("{}_{}", main_class, nailgun_req_digest.0);
         let nailgun_name2 = nailgun_name.clone();
 
+        let workdir_path2 = workdir_path.clone();
+        let workdir_path3= workdir_path.clone();
+        let workdir_path4 = workdir_path.clone();
         let materialize = self.inner
             .store
             .materialize_directory(workdir_path.clone(), nailgun_req.input_files, workunit_store.clone())
             .and_then(move |_metadata| {
                 maybe_jdk_home.map_or(Ok(()), |jdk_home| {
-                    symlink(jdk_home, workdir_path2.clone().join(".jdk"))
-                        .map_err(|err| format!("Error making symlink for local execution: {:?}", err))
+                    if !jdk_home.exists() {
+                        symlink(jdk_home, workdir_path2.clone().join(".jdk"))
+                            .map_err(|err| format!("Error making symlink for local execution in workdir {:?}: {:?}", &workdir_path2, err))
+                    } else {
+                        debug!("JDK home for Nailgun already exists in {:?}. Using that one.", &workdir_path4);
+                        Ok(())
+                    }
                 })?;
                 Ok(())
             })
             .inspect(move |_| info!("Materialized directory! {:?}", &workdir_path3));
-
-
 
         let nailguns = self.nailguns.clone();
         let metadata = self.metadata.clone();

@@ -27,7 +27,6 @@ lazy_static! {
     static ref NAILGUN_PORT_REGEX: Regex = Regex::new(r".*\s+port\s+(\d+)\.$").unwrap();
 }
 
-// TODO: This can be just an enum, but using an enum while developing.
 type NailgunProcessName = String;
 type NailgunProcessFingerprint = Digest;
 type Pid = usize;
@@ -49,7 +48,11 @@ impl NailgunPool {
         self.processes.lock().get(name).map(|elem| elem.port)
     }
 
-    pub fn connect(&self, name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<(), String> {
+    pub fn connect(&self,
+                   name: NailgunProcessName,
+                   startup_options: ExecuteProcessRequest,
+                   workdir_path: &PathBuf,
+                   nailgun_req_digest: Digest) -> Result<(), String> {
         // If the process is in the map, check if it's alive using the handle.
         let status = {
             self.processes.lock()
