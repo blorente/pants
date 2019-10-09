@@ -97,6 +97,7 @@ fn get_nailgun_request(args: Vec<String>, input_files: Digest, jdk: Option<PathB
         description: String::from("ExecuteProcessRequest to start a nailgun"),
         jdk_home: jdk,
         target_platform: Platform::Darwin,
+        is_nailgunnable: true,
     }
 }
 
@@ -110,6 +111,10 @@ impl super::CommandRunner for NailgunCommandRunner {
 
         let mut client_req = self.extract_compatible_request(&req).unwrap();
         info!("BL: Full EPR: {:#?}", &client_req);
+        if !client_req.is_nailgunnable {
+            info!("BL: The request is not nailgunnable! Short-circuiting to regular process execution");
+            return self.inner.run(req, workunit_store)
+        }
         let ParsedArgLists {nailgun_args, client_args } = split_args(&client_req.argv);
         let nailgun_req = get_nailgun_request(nailgun_args, client_req.input_files, client_req.jdk_home.clone());
 

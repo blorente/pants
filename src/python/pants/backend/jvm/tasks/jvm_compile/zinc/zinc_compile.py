@@ -479,6 +479,7 @@ class BaseZincCompile(JvmCompile):
       output_directories=output_directories,
       description="zinc compile for {}".format(ctx.target.address.spec),
       jdk_home=self._zinc.underlying_dist.home,
+      nailgunnable=True,
     )
     res = self.context.execute_process_synchronously_or_raise(
       req, self.name(), [WorkUnitLabel.COMPILER])

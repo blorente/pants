@@ -141,7 +141,6 @@ impl Core {
 
     let mut command_runner: Box<dyn process_execution::CommandRunner> =
       Box::new(BoundedCommandRunner::new(
-//        Box::new(process_execution::local::CommandRunner::new(
         Box::new(
           process_execution::nailgun::NailgunCommandRunner::new(
             process_execution::local::CommandRunner::new(

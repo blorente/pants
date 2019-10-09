@@ -431,6 +431,8 @@ impl MultiPlatformExecuteProcess {
       }
     };
 
+    let is_nailgunnable = externs::project_bool(&value, "nailgunnable");
+
     Ok(process_execution::ExecuteProcessRequest {
       argv: externs::project_multi_strs(&value, "argv"),
       env: env,
@@ -441,6 +443,7 @@ impl MultiPlatformExecuteProcess {
       description: description,
       jdk_home: jdk_home,
       target_platform: target_platform,
+      is_nailgunnable: is_nailgunnable,
     })
   }
   fn lift(value: &Value) -> Result<MultiPlatformExecuteProcess, String> {

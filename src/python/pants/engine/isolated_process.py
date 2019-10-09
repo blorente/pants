@@ -28,6 +28,7 @@ class ExecuteProcessRequest(datatype([
   # NB: timeout_seconds covers the whole remote operation including queuing and setup.
   ('timeout_seconds', Exactly(float, int)),
   ('jdk_home', string_optional),
+  ('nailgunnable', bool),
 ])):
   """Request for execution with args and snapshots to extract."""
 
@@ -43,6 +44,7 @@ class ExecuteProcessRequest(datatype([
     output_directories=(),
     timeout_seconds=_default_timeout_seconds,
     jdk_home=None,
+    nailgunnable=False,
   ):
     if env is None:
       env = ()
@@ -62,6 +64,7 @@ class ExecuteProcessRequest(datatype([
       output_directories=output_directories,
       timeout_seconds=timeout_seconds,
       jdk_home=jdk_home,
+      nailgunnable=nailgunnable,
     )
 
 

@@ -833,6 +833,7 @@ mod tests {
         description: "bash".to_string(),
         jdk_home: None,
         target_platform: Platform::None,
+        is_nailgunnable: False,
       },
       preserved_work_root.clone(),
       false,
