@@ -10,9 +10,9 @@ use hashing::{Fingerprint, Digest};
 use crate::{ExecuteProcessRequest, ExecuteProcessRequestMetadata, MultiPlatformExecuteProcessRequest};
 use std::path::{PathBuf, Path, Component};
 use std::hash::{Hash, Hasher};
-use std::fs::{metadata, File};
+use std::fs::{metadata, File, read};
 use std::{fs, io};
-use std::io::{BufRead, BufReader, Stdout};
+use std::io::{BufRead, BufReader, Stdout, Read};
 use std::io::Write;
 use std::collections::hash_map::DefaultHasher;
 use std::process::Stdio;
@@ -22,6 +22,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use crate::local::StreamedHermeticCommand;
 use log::info;
+use core::borrow::BorrowMut;
 
 lazy_static! {
     static ref NAILGUN_PORT_REGEX: Regex = Regex::new(r".*\s+port\s+(\d+)\.$").unwrap();
@@ -29,18 +30,19 @@ lazy_static! {
 
 pub type NailgunProcessName = String;
 type NailgunProcessFingerprint = Digest;
+type NailgunProcessMap = HashMap<NailgunProcessName, NailgunProcessMetadata>;
 type Pid = usize;
 type Port = usize;
 
 #[derive(Clone)]
 pub struct NailgunPool {
-    processes: Arc<Mutex<HashMap<NailgunProcessName, NailgunProcessMetadata>>>,
+    processes: Arc<Mutex<NailgunProcessMap>>,
 }
 
 impl NailgunPool {
     pub fn new() -> Self {
         NailgunPool {
-            processes: Arc::new(Mutex::new(HashMap::new())),
+            processes: Arc::new(Mutex::new(NailgunProcessMap::new())),
         }
     }
 
@@ -49,20 +51,22 @@ impl NailgunPool {
                    startup_options: ExecuteProcessRequest,
                    workdir_path: &PathBuf,
                    nailgun_req_digest: Digest) -> Result<Port, String> {
+        info!("BL: Locking processes so that only one can be connecting at a time");
+        let mut processes = self.processes.lock();
         // If the process is in the map, check if it's alive using the handle.
         let status = {
-            self.processes.lock()
+            processes
                 .get_mut(&name)
                 .map(|process| {
                     process.handle.lock().try_wait().map_err(|e| format!("Error getting the process status! {}", e)).clone()
                 })
         };
-        if let Some(status) = status {
+        let a = if let Some(status) = status {
             let (process_name, process_fingerprint, process_port) = {
-                self.processes.lock()
-                            .get(&name)
-                            .map(|process| { (process.name.clone(), process.fingerprint.clone(), process.port) })
-                            .unwrap()
+                processes
+                    .get(&name)
+                    .map(|process| { (process.name.clone(), process.fingerprint.clone(), process.port) })
+                    .unwrap()
             };
             info!("Checking if process {} is still alive at port {}...", &process_name, process_port);
             status
@@ -85,31 +89,44 @@ impl NailgunPool {
                                          &process_name, startup_options, process_fingerprint
                                 );
                                 // self.processes.remove(&name);
-                                self.start_new_nailgun(name, startup_options, workdir_path, nailgun_req_digest)
+                                self.start_new_nailgun(&mut *processes, name, startup_options, workdir_path, nailgun_req_digest)
                             }
                         },
                         _ => {
                             // Process Exited successfully, we need to restart
                             info!("This happens when the process is not running, but there is metadata stored in the map. Restarting process...");
                             // self.processes.remove(&name);
-                            self.start_new_nailgun(name, startup_options, workdir_path, nailgun_req_digest)
+                            self.start_new_nailgun(&mut *processes, name, startup_options, workdir_path, nailgun_req_digest)
                         }
                     }
                 })
         } else {
             // We don't have a running nailgun
-            self.start_new_nailgun(name, startup_options, workdir_path, nailgun_req_digest)
-        }
+            self.start_new_nailgun(&mut *processes, name, startup_options, workdir_path, nailgun_req_digest)
+        };
+        info!("BL: About to unlock!");
+        a
     }
 
-    fn start_new_nailgun(&self, name: String, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<Port, String> {
+    fn start_new_nailgun(&self,
+                         processes: &mut NailgunProcessMap,
+                         name: String,
+                         startup_options: ExecuteProcessRequest,
+                         workdir_path: &PathBuf,
+                         nailgun_req_digest: Digest) -> Result<Port, String> {
         info!("Starting new Nailgun for {}, with options {:?}", &name, &startup_options);
         NailgunProcessMetadata::start_new(name.clone(), startup_options, workdir_path, nailgun_req_digest)
             .and_then(move |process| {
                 let port = process.port;
-                self.processes.lock().insert(name.clone(), process);
+                processes.insert(name.clone(), process);
                 Ok(port)
             })
+    }
+
+    pub fn print_stdout(&self, name: &NailgunProcessName) -> String {
+        self.processes.lock()
+            .get_mut(name)
+            .map(|process| process.print_stdout()).unwrap()
     }
 }
 
@@ -137,7 +154,6 @@ fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
 
 impl NailgunProcessMetadata {
     fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<NailgunProcessMetadata, String> {
-       info!("I need to start a new process!");
         info!("I need to start a new process!");
         info!("I need to start a new process!");
         info!("I need to start a new process!");
@@ -145,12 +161,14 @@ impl NailgunProcessMetadata {
         info!("I need to start a new process!");
         info!("I need to start a new process!");
         info!("I need to start a new process!");
-       let cmd = startup_options.argv[0].clone();
-       let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
-       info!("Starting process with cmd: {:?}, args {:?}, in cwd {:?}", cmd, &startup_options.argv[1..], &workdir_path);
+        info!("I need to start a new process!");
+        let cmd = startup_options.argv[0].clone();
+        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
+        info!("Starting process with cmd: {:?}, args {:?}, in cwd {:?}", cmd, &startup_options.argv[1..], &workdir_path);
         let handle = std::process::Command::new(&cmd)
                 .args(&startup_options.argv[1..])
                 .stdout(Stdio::piped())
+//                .stderr(Stdio::piped())
                 .stderr(stderr_file)
                 .current_dir(&workdir_path)
                 .spawn();
@@ -171,6 +189,16 @@ impl NailgunProcessMetadata {
             })
           })
     }
+
+    fn print_stdout(&mut self) -> String {
+        let mut handle =  self.handle.lock();
+        let mut stdout = handle.stdout.as_mut().unwrap();
+        let mut s = String::new();
+
+        stdout.read_to_string(&mut s);
+        info!("BL: STDOUT OF THE SERVER: {}", s);
+        s
+    }
 }
 
 impl Drop for NailgunProcessMetadata {
@@ -184,6 +212,7 @@ impl Drop for NailgunProcessMetadata {
         info!("Exiting process {:?}", self);
         info!("Exiting process {:?}", self);
         info!("Exiting process {:?}", self);
+
         self.handle.lock().kill();
     }
 }

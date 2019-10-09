@@ -142,6 +142,7 @@ impl super::CommandRunner for NailgunCommandRunner {
         let nailgun_req_digest = crate::digest(MultiPlatformExecuteProcessRequest::from(nailgun_req.clone()), &self.metadata);
         let nailgun_name = format!("{}_{}", main_class, nailgun_req_digest.0);
         let nailgun_name2 = nailgun_name.clone();
+        let nailgun_name3 = nailgun_name.clone();
 
         let nailguns_workdir = try_future!(self.get_nailguns_workdir(&nailgun_name));
 
@@ -154,7 +155,7 @@ impl super::CommandRunner for NailgunCommandRunner {
             .materialize_directory(nailguns_workdir.clone(), client_req.input_files, workunit_store.clone())
             .and_then(move |_metadata| {
                 maybe_jdk_home.map_or(Ok(()), |jdk_home_relpath| {
-                    let mut jdk_home_in_workdir = workdir_path2.clone().join(".jdk");
+                    let jdk_home_in_workdir = workdir_path2.clone().join(".jdk");
                     if !jdk_home_in_workdir.exists() {
                         symlink(jdk_home_relpath, jdk_home_in_workdir)
                             .map_err(|err| format!("Error making symlink for local execution in workdir {:?}: {:?}", &workdir_path2, err))
@@ -192,6 +193,9 @@ impl super::CommandRunner for NailgunCommandRunner {
 
                         info!("Running Client EPR {:#?} on Nailgun", client_req);
                         inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
+                            .map_err(move |err|
+                                format!("Nailgun Request errored with {}!\n Server output {}", err, nailguns.print_stdout(&nailgun_name3))
+                            ).to_boxed()
                     }
                     Err(e) => {
                         futures::future::err(e).to_boxed()

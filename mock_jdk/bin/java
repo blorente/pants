@@ -2,4 +2,4 @@
 set -xe
 
 echo "Yes yes! I am the Jei Dee Kay!, Running with port $NAILGUN_PORT"
-/opt/twitter_mde/bin/ng $@
+/Library/Frameworks/Python.framework/Versions/3.7/bin/python3 /Users/bescobar/workspace/otherpants/mock_jdk/bin/ng.py -- $@
