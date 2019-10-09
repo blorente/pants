@@ -193,9 +193,6 @@ impl super::CommandRunner for NailgunCommandRunner {
 
                         info!("Running Client EPR {:#?} on Nailgun", client_req);
                         inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
-                            .map_err(move |err|
-                                format!("Nailgun Request errored with {}!\n Server output {}", err, nailguns.print_stdout(&nailgun_name3))
-                            ).to_boxed()
                     }
                     Err(e) => {
                         futures::future::err(e).to_boxed()
