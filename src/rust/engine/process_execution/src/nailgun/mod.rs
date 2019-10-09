@@ -13,6 +13,7 @@ use std::collections::btree_set::BTreeSet;
 use std::time::Duration;
 use log::{info, debug};
 use hashing::Digest;
+use crate::nailgun::nailgun_pool::NailgunProcessName;
 
 pub mod nailgun_pool;
 
@@ -22,17 +23,9 @@ pub struct NailgunCommandRunner {
     inner: Arc<super::local::CommandRunner>,
     nailguns: NailgunPool,
     metadata: ExecuteProcessRequestMetadata,
+    workdir_base: PathBuf,
 }
 
-impl NailgunCommandRunner {
-    pub fn new(runner: super::local::CommandRunner, metadata: ExecuteProcessRequestMetadata) -> Self {
-        NailgunCommandRunner {
-            inner: Arc::new(runner),
-            nailguns: NailgunPool::new(),
-            metadata: metadata,
-        }
-    }
-}
 
 fn is_client_arg(arg: &String) -> bool {
     arg.starts_with("@")
@@ -101,22 +94,46 @@ fn get_nailgun_request(args: Vec<String>, input_files: Digest, jdk: Option<PathB
     }
 }
 
+impl NailgunCommandRunner {
+    pub fn new(runner: super::local::CommandRunner, metadata: ExecuteProcessRequestMetadata) -> Self {
+        let mut workdir_base = std::env::temp_dir();
+
+        NailgunCommandRunner {
+            inner: Arc::new(runner),
+            nailguns: NailgunPool::new(),
+            metadata: metadata,
+            workdir_base: workdir_base,
+        }
+    }
+
+    fn get_nailguns_workdir(&self, nailgun_name: &NailgunProcessName) -> Result<PathBuf, String> {
+        let workdir = self.workdir_base.clone().join(nailgun_name);
+        if self.workdir_base.exists() {
+            std::fs::create_dir_all(workdir.clone())
+                .map_err(|err| format!("Error creating the nailgun workdir! {}", err))
+                .map(|_| workdir)
+        } else {
+            info!("BL: Nailgun workdir {:?} exits! Using that...", self.workdir_base);
+            Ok(workdir)
+        }
+    }
+}
+
 impl super::CommandRunner for NailgunCommandRunner {
     fn run(
         &self,
         req: MultiPlatformExecuteProcessRequest,
         workunit_store: WorkUnitStore) -> BoxFuture<FallibleExecuteProcessResult, String> {
 
-        let workdir_path = PathBuf::from("/tmp/a");
-
         let mut client_req = self.extract_compatible_request(&req).unwrap();
-        info!("BL: Full EPR: {:#?}", &client_req);
+        info!("BL: Full EPR:\n {:#?}", &client_req);
         if !client_req.is_nailgunnable {
             info!("BL: The request is not nailgunnable! Short-circuiting to regular process execution");
             return self.inner.run(req, workunit_store)
         }
         let ParsedArgLists {nailgun_args, client_args } = split_args(&client_req.argv);
         let nailgun_req = get_nailgun_request(nailgun_args, client_req.input_files, client_req.jdk_home.clone());
+        info!("BL: NAILGUN EPR:\n {:#?}", &nailgun_req);
 
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
@@ -125,16 +142,19 @@ impl super::CommandRunner for NailgunCommandRunner {
         let nailgun_name = format!("{}_{}", main_class, nailgun_req_digest.0);
         let nailgun_name2 = nailgun_name.clone();
 
-        let workdir_path2 = workdir_path.clone();
-        let workdir_path3= workdir_path.clone();
-        let workdir_path4 = workdir_path.clone();
+        let nailguns_workdir = try_future!(self.get_nailguns_workdir(&nailgun_name));
+
+        let workdir_path2 = nailguns_workdir.clone();
+        let workdir_path3= nailguns_workdir.clone();
+        let workdir_path4 = nailguns_workdir.clone();
         let materialize = self.inner
             .store
             .materialize_directory(workdir_path.clone(), nailgun_req.input_files, workunit_store.clone())
             .and_then(move |_metadata| {
-                maybe_jdk_home.map_or(Ok(()), |jdk_home| {
-                    if !jdk_home.exists() {
-                        symlink(jdk_home, workdir_path2.clone().join(".jdk"))
+                maybe_jdk_home.map_or(Ok(()), |jdk_home_relpath| {
+                    let mut jdk_home_in_workdir = workdir_path2.clone().join(".jdk");
+                    if !jdk_home_in_workdir.exists() {
+                        symlink(jdk_home_relpath, jdk_home_in_workdir)
                             .map_err(|err| format!("Error making symlink for local execution in workdir {:?}: {:?}", &workdir_path2, err))
                     } else {
                         debug!("JDK home for Nailgun already exists in {:?}. Using that one.", &workdir_path4);
@@ -149,7 +169,7 @@ impl super::CommandRunner for NailgunCommandRunner {
         let metadata = self.metadata.clone();
         let nailgun = materialize
             .map(move |_metadata| {
-                nailguns.connect(nailgun_name.clone(), nailgun_req, &workdir_path, nailgun_req_digest)
+                nailguns.connect(nailgun_name.clone(), nailgun_req, &nailguns_workdir, nailgun_req_digest)
             })
             .inspect(|_| info!("Connected to nailgun!"));
 

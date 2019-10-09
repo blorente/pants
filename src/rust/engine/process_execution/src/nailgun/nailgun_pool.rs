@@ -27,7 +27,7 @@ lazy_static! {
     static ref NAILGUN_PORT_REGEX: Regex = Regex::new(r".*\s+port\s+(\d+)\.$").unwrap();
 }
 
-type NailgunProcessName = String;
+pub type NailgunProcessName = String;
 type NailgunProcessFingerprint = Digest;
 type Pid = usize;
 type Port = usize;
