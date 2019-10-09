@@ -145,16 +145,13 @@ impl StreamedHermeticCommand {
   }
 
   pub(crate) fn spawn(&mut self) -> Result<tokio_process::Child, String> {
-    let e = self
+      self
         .inner
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    println!("Really about to start the process!");
-    e
+        .stderr(Stdio::piped())
         .spawn_async()
         .map_err(|e| {
-          println!("Error launching process: {:?}", e);
           format!("Error launching process: {:?}", e)
         })
   }
@@ -162,7 +159,6 @@ impl StreamedHermeticCommand {
   fn stream(&mut self) -> Result<impl Stream<Item = ChildOutput, Error = String> + Send, String> {
     self.spawn()
       .map_err(|e| {
-        println!("Error launching process: {:?}", e);
         format!("Error launching process: {:?}", e)
       })
       .and_then(|mut child| {
@@ -283,7 +279,6 @@ impl super::CommandRunner for CommandRunner {
       .store
       .materialize_directory(workdir_path.clone(), req.input_files, workunit_store)
       .and_then(move |_metadata| {
-        println!("Workdir path is {:?}", &workdir_path3);
         maybe_jdk_home.map_or(Ok(()), |jdk_home| {
           symlink(jdk_home, workdir_path3.clone().join(".jdk"))
             .map_err(|err| format!("Error making symlink for local execution: {:?}", err))
@@ -313,7 +308,6 @@ impl super::CommandRunner for CommandRunner {
         Ok(())
       })
       .and_then(move |()| {
-        println!("Streaming Command");
         StreamedHermeticCommand::new(&argv[0])
           .args(&argv[1..])
           .current_dir(&workdir_path)
@@ -326,11 +320,9 @@ impl super::CommandRunner for CommandRunner {
       // down the line for streaming process results to console logs, etc. as tracked by:
       //   https://github.com/pantsbuild/pants/issues/6089
       .and_then({
-        println!("Collecting Results");
         ChildResults::collect_from
       })
       .and_then(move |child_results| {
-        println!("Materualizing output");
         let output_snapshot = if output_file_paths.is_empty() && output_dir_paths.is_empty() {
           future::ok(store::Snapshot::empty()).to_boxed()
         } else {

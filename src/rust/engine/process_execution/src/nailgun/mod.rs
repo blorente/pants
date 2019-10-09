@@ -11,7 +11,7 @@ use std::os::unix::fs::symlink;
 use std::collections::btree_map::BTreeMap;
 use std::collections::btree_set::BTreeSet;
 use std::time::Duration;
-use log::{info, debug};
+use log::{info, trace,debug};
 use hashing::Digest;
 use crate::nailgun::nailgun_pool::NailgunProcessName;
 
@@ -19,17 +19,12 @@ pub mod nailgun_pool;
 
 pub type NailgunPool = nailgun_pool::NailgunPool;
 
-pub struct NailgunCommandRunner {
-    inner: Arc<super::local::CommandRunner>,
-    nailguns: NailgunPool,
-    metadata: ExecuteProcessRequestMetadata,
-    workdir_base: PathBuf,
-}
+// TODO Pass down to the EPR from the Python side.
+static NAILGUN_JAR: &str = "/Users/bescobar/workspace/otherpants/.pants.d/bootstrap/bootstrap-jvm-tools/a0ebe8e0b001/ivy/jars/com.martiansoftware/nailgun-server/jars/nailgun-server-0.9.1.jar";
 
-
-fn is_client_arg(arg: &String) -> bool {
-    arg.starts_with("@")
-}
+// Hardcoded constants for connecting to nailgun
+static NAILGUN_MAIN_CLASS: &str = "com.martiansoftware.nailgun.NGServer";
+static ARGS_TO_START_NAILGUN: [&str; 1] = [":0"];
 
 /// Represents the result of parsing the args of a nailgunnable ExecuteProcessRequest
 /// TODO We may want to split the classpath by the ":", and store it as a Vec<String>
@@ -38,10 +33,6 @@ struct ParsedArgLists {
     nailgun_args: Vec<String>,
     client_args: Vec<String>,
 }
-
-static NAILGUN_JAR: &str = "/Users/bescobar/workspace/otherpants/.pants.d/bootstrap/bootstrap-jvm-tools/a0ebe8e0b001/ivy/jars/com.martiansoftware/nailgun-server/jars/nailgun-server-0.9.1.jar";
-static NAILGUN_MAIN_CLASS: &str = "com.martiansoftware.nailgun.NGServer";
-static ARGS_TO_START_NAILGUN: [&str; 1] = [":0"];
 
 fn split_args(args: &Vec<String>) -> ParsedArgLists {
     let mut iterator = args.iter();
@@ -95,28 +86,39 @@ fn get_nailgun_request(args: Vec<String>, input_files: Digest, jdk: Option<PathB
     }
 }
 
+pub struct NailgunCommandRunner {
+    inner: Arc<super::local::CommandRunner>,
+    nailguns: NailgunPool,
+    metadata: ExecuteProcessRequestMetadata,
+    workdir_base: PathBuf,
+}
+
 impl NailgunCommandRunner {
     pub fn new(runner: super::local::CommandRunner, metadata: ExecuteProcessRequestMetadata) -> Self {
-        let mut workdir_base = std::env::temp_dir();
-
         NailgunCommandRunner {
             inner: Arc::new(runner),
             nailguns: NailgunPool::new(),
             metadata: metadata,
-            workdir_base: workdir_base,
+            workdir_base: std::env::temp_dir(),
         }
     }
 
+    /// Ensure that the workdir for the given nailgun name exists.
     fn get_nailguns_workdir(&self, nailgun_name: &NailgunProcessName) -> Result<PathBuf, String> {
         let workdir = self.workdir_base.clone().join(nailgun_name);
         if self.workdir_base.exists() {
+            debug!("Creating nailgun workdir at {:?}", self.workdir_base);
             std::fs::create_dir_all(workdir.clone())
                 .map_err(|err| format!("Error creating the nailgun workdir! {}", err))
                 .map(|_| workdir)
         } else {
-            info!("BL: Nailgun workdir {:?} exits! Using that...", self.workdir_base);
+            debug!("nailgun workdir {:?} exits. Reusing that...", self.workdir_base);
             Ok(workdir)
         }
+    }
+
+    fn calculate_nailgun_name(main_class: &String, digest: &Digest) -> String {
+        format!("{}_{}", main_class, digest.0)
     }
 }
 
@@ -127,22 +129,25 @@ impl super::CommandRunner for NailgunCommandRunner {
         workunit_store: WorkUnitStore) -> BoxFuture<FallibleExecuteProcessResult, String> {
 
         let mut client_req = self.extract_compatible_request(&req).unwrap();
-        info!("BL: Full EPR:\n {:#?}", &client_req);
         if !client_req.is_nailgunnable {
-            info!("BL: The request is not nailgunnable! Short-circuiting to regular process execution");
+            trace!("The request is not nailgunnable! Short-circuiting to regular process execution");
             return self.inner.run(req, workunit_store)
         }
+
+        trace!("Running request under nailgun:\n {:#?}", &client_req);
         let ParsedArgLists {nailgun_args, client_args } = split_args(&client_req.argv);
         let nailgun_req = get_nailgun_request(nailgun_args, client_req.input_files, client_req.jdk_home.clone());
-        info!("BL: NAILGUN EPR:\n {:#?}", &nailgun_req);
+        trace!("Extracted nailgun request:\n {:#?}", &nailgun_req);
 
         let maybe_jdk_home = nailgun_req.jdk_home.clone();
 
         let main_class = client_args.iter().next().unwrap().clone(); // We assume the last one is the main class name
         let nailgun_req_digest = crate::digest(MultiPlatformExecuteProcessRequest::from(nailgun_req.clone()), &self.metadata);
-        let nailgun_name = format!("{}_{}", main_class, nailgun_req_digest.0);
+        let nailgun_name = NailgunCommandRunner::calculate_nailgun_name(&main_class, &nailgun_req_digest);
         let nailgun_name2 = nailgun_name.clone();
         let nailgun_name3 = nailgun_name.clone();
+        let nailgun_name4 = nailgun_name.clone();
+        let nailgun_name5 = nailgun_name.clone();
 
         let nailguns_workdir = try_future!(self.get_nailguns_workdir(&nailgun_name));
 
@@ -166,7 +171,7 @@ impl super::CommandRunner for NailgunCommandRunner {
                 })?;
                 Ok(())
             })
-            .inspect(move |_| info!("Materialized directory! {:?}", &workdir_path3));
+            .inspect(move |_| debug!("Materialized directory {:?} before connecting to nailgun server.", &workdir_path3));
 
         let nailguns = self.nailguns.clone();
         let metadata = self.metadata.clone();
@@ -174,7 +179,7 @@ impl super::CommandRunner for NailgunCommandRunner {
             .map(move |_metadata| {
                 nailguns.connect(nailgun_name.clone(), nailgun_req, &nailguns_workdir, nailgun_req_digest)
             })
-            .inspect(|_| info!("Connected to nailgun!"));
+            .inspect(move |_| debug!("Connected to nailgun instance {}", &nailgun_name4));
 
         let inner = self.inner.clone();
         let nailguns = self.nailguns.clone();
@@ -182,7 +187,7 @@ impl super::CommandRunner for NailgunCommandRunner {
             .and_then(move |res| {
                 match res {
                     Ok(port) => {
-                        info!("Got nailgun at port {:#?}", port);
+                        debug!("Got nailgun port {:#?}", port);
 
                         client_req.argv = vec![
                             ".jdk/bin/java".to_string(),
@@ -191,8 +196,16 @@ impl super::CommandRunner for NailgunCommandRunner {
                         client_req.jdk_home = Some(PathBuf::from("/Users/bescobar/workspace/otherpants/mock_jdk"));
                         client_req.env.insert("NAILGUN_PORT".into(), port.to_string());
 
-                        info!("Running Client EPR {:#?} on Nailgun", client_req);
-                        inner.run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
+                        trace!("Running client request on nailgun:\n {:#?}", client_req);
+                        inner
+                            .run(MultiPlatformExecuteProcessRequest::from(client_req), workunit_store)
+                            // TODO Before Merge:
+                            //      When removing this call to print_stdout, the child processes crash reliably, possibly due to race conditions
+                            .map_err(move |err|
+                                format!("Something happened with the process! {}\n Stdout of nailgun {}",
+                                        err, nailguns.print_stdout(&nailgun_name5))
+                            )
+                            .to_boxed()
                     }
                     Err(e) => {
                         futures::future::err(e).to_boxed()
