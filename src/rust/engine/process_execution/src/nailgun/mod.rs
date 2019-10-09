@@ -83,7 +83,8 @@ fn get_nailgun_request(args: Vec<String>, input_files: Digest, jdk: Option<PathB
     ExecuteProcessRequest {
         argv: full_args,
         env: BTreeMap::new(),
-        input_files: input_files,
+        // TODO This should be calculated from deeply fingerprinting the classpath!
+        input_files: Default::default(),
         output_files: BTreeSet::new(),
         output_directories: BTreeSet::new(),
         timeout: Duration::new(1000, 0),
@@ -149,7 +150,8 @@ impl super::CommandRunner for NailgunCommandRunner {
         let workdir_path4 = nailguns_workdir.clone();
         let materialize = self.inner
             .store
-            .materialize_directory(workdir_path.clone(), nailgun_req.input_files, workunit_store.clone())
+            // TODO This materializes the input files in the client req, which is a superset of the files we need (we only need the classpath, not the input files)
+            .materialize_directory(nailguns_workdir.clone(), client_req.input_files, workunit_store.clone())
             .and_then(move |_metadata| {
                 maybe_jdk_home.map_or(Ok(()), |jdk_home_relpath| {
                     let mut jdk_home_in_workdir = workdir_path2.clone().join(".jdk");

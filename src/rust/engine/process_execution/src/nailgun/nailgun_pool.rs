@@ -138,6 +138,13 @@ fn read_port(child: &mut std::process::Child) -> Result<Port, String> {
 impl NailgunProcessMetadata {
     fn start_new(name: NailgunProcessName, startup_options: ExecuteProcessRequest, workdir_path: &PathBuf, nailgun_req_digest: Digest) -> Result<NailgunProcessMetadata, String> {
        info!("I need to start a new process!");
+        info!("I need to start a new process!");
+        info!("I need to start a new process!");
+        info!("I need to start a new process!");
+        info!("I need to start a new process!");
+        info!("I need to start a new process!");
+        info!("I need to start a new process!");
+        info!("I need to start a new process!");
        let cmd = startup_options.argv[0].clone();
        let stderr_file = File::create(&format!("stderr_{}.txt", name)).unwrap();
        info!("Starting process with cmd: {:?}, args {:?}, in cwd {:?}", cmd, &startup_options.argv[1..], &workdir_path);
