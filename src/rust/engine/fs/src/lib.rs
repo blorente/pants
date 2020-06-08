@@ -649,6 +649,19 @@ impl PosixFS {
     let root = self.root.0.clone();
     let mut stats: Vec<Stat> = dir_abs
       .read_dir()?
+      .filter(|readdir| {
+        // We do a preliminary ignore check here,
+        // so that we don't try to stat things like broken symlinks.
+        let mut ignored = false; // We don't want to filter out errors, as we catch them later
+        if let Ok(dir_entry) = readdir {
+          if let Ok(file_type) = dir_entry.file_type() {
+            let is_dir = file_type.is_dir();
+            let path = dir_abs.join(dir_entry.file_name());
+            ignored = self.ignore.is_ignored_path(&path, is_dir);
+          }
+        }
+        !ignored
+      })
       .map(|readdir| {
         let dir_entry = readdir?;
         let (file_type, compute_metadata): (_, Box<dyn FnOnce() -> Result<_, _>>) =
